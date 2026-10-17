@@ -58,12 +58,15 @@ jobs:
         continue-on-error: true
         env:
           PYTHONUNBUFFERED: "1"
+          OCI_COMPARTMENT_ID: ${{ secrets.OCI_COMPARTMENT_ID }}
+          OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+          OCI_INSTANCE_NAME_MICRO: micro-server
         run: timeout 19800 python oci_retry_micro.py
 
       - name: Auto-disable workflow on success
         if: steps.run_script.outcome == 'success'
         run: |
-          curl -s -X PUT \
+          curl -sS --fail -X PUT \
             -H "Authorization: token ${{ secrets.GH_PAT }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/actions/workflows/oci_retry_micro.yml/disable
@@ -72,7 +75,7 @@ jobs:
       - name: Trigger next Job (seamless relay)
         if: steps.run_script.outcome != 'success'
         run: |
-          curl -s -X POST \
+          curl -sS --fail -X POST \
             -H "Authorization: token ${{ secrets.GH_PAT }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/actions/workflows/oci_retry_micro.yml/dispatches \
