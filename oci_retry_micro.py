@@ -1,4 +1,5 @@
 import oci
+import os
 import time
 import datetime
 
@@ -10,12 +11,10 @@ import datetime
 # ║  OS     : Canonical Ubuntu 22.04                     ║
 # ╚══════════════════════════════════════════════════════╝
 
-# ─── Configuration ───────────────────────────────────────
-COMPARTMENT_ID = (
-    "ocid1.tenancy.oc1..aaaaaaaaaqij5zlnm3v5qprvdll3j7nc6o3dk4ykzerugzxe37ckajkpjxpa"  # Replace with your tenancy OCID
-)
-SSH_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCxPqVeut2vbwt8VVAvHDnEN+q61jrIAGD9cQgW6kTeLCjjzm9UHt2Flf1KoohSu+0YFvSn8+t67r9T9wfdP14WBfZAg531CCyUNTbF5KmkaHgmxftWu3FgY00BTnGa4YEEXdAGn3X953HzFKJDpJVJyWFfWXJUOWdfivTKlO+62SBnlIdcanckwA6rzr9dXNSYlasoVnuk+ujANjhnxf4TpKcI4AQrAmRJQ83lXfI2yExBMX+Qx/JNSA2/2XFRfT7OMgddExibCRpSyammfatNLUIM5s+ab6aeO3aNvVWGok6/dpYaBPbvndERQs6p9FQr88C/VFeEwHCtvMT8c2WB ssh-key-2026-03-07"  # Replace with your SSH public key (.pub file content)
-INSTANCE_NAME = "micro-server"  # Change for each new instance (e.g. "micro-server-2" for a second one)
+# ─── Configuration (from environment / GitHub Secrets) ───
+COMPARTMENT_ID = os.environ["OCI_COMPARTMENT_ID"]
+SSH_PUBLIC_KEY = os.environ["OCI_SSH_PUBLIC_KEY"]
+INSTANCE_NAME = os.environ.get("OCI_INSTANCE_NAME_MICRO", "micro-server")
 BOOT_VOLUME_SIZE_IN_GBS = 50
 RETRY_INTERVAL = 90  # seconds
 # ────────────────────────────────────────────────────────
