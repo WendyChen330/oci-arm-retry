@@ -9,7 +9,7 @@ permissions:
 
 concurrency:
   group: oci-retry-micro      # Separate from ARM workflow, no interference
-  cancel-in-progress: false   # Do not cancel running jobs; new ones queue (max 1 running + 1 waiting)
+  cancel-in-progress: true     # Replace duplicate/manual runs instead of queueing them
 
 jobs:
   retry:
@@ -28,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install OCI SDK
-        run: pip install --requirement requirements.txt
+        run: pip install oci
 
       - name: Set up OCI credentials
         env:

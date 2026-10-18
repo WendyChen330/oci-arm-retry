@@ -23,18 +23,7 @@ Both are part of the Oracle Always Free tier. The ARM script uses half of Oracle
 
 ---
 
-## Two Ways to Run
-
-| Method | Best For | Pros | Cons |
-|--------|----------|------|------|
-| Run locally | Quick testing | No GitHub setup needed | Your computer must stay on |
-| GitHub Actions (recommended) | Long-term automated retrying | 24/7, no computer resources needed | Requires a **public** repo + Secrets setup |
-
-> 💡 **Why public repo?** Public repositories get unlimited GitHub Actions minutes for free. Private repos have a monthly limit.
-
----
-
-## Script Configuration
+## Configuration
 
 The scripts read account-specific values from environment variables. In GitHub Actions, set the matching repository secrets listed below.
 
@@ -47,16 +36,11 @@ BOOT_VOLUME_SIZE_IN_GBS = 100
 RETRY_INTERVAL = 90  # Retry interval in seconds
 ```
 
-For local runs, export `OCI_COMPARTMENT_ID`, `OCI_SSH_PUBLIC_KEY`, and optionally `OCI_INSTANCE_NAME` before starting the script.
-
 > The ARM script now exposes `BOOT_VOLUME_SIZE_IN_GBS` as a configuration variable. The default is `100 GB`, which is safer under the Always Free `200 GB` regional storage quota than the old `200 GB` default.
 
 ### Micro script: `oci_retry_micro.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..your-ocid"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...your-public-key"
-INSTANCE_NAME  = "micro-server"   # Change to "micro-server-2" when claiming your second Micro instance
 BOOT_VOLUME_SIZE_IN_GBS = 50
 RETRY_INTERVAL = 90  # Retry interval in seconds
 ```
@@ -85,53 +69,6 @@ Or generate your own key locally with `ssh-keygen`.
 
 ---
 
-## Run Locally
-
-```bash
-# Create an isolated environment and install the pinned OCI SDK
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --requirement requirements.txt
-
-# Copy .env.example to .env, replace its placeholders, then load it
-cp .env.example .env
-set -a
-. .env
-set +a
-
-# Run ARM version
-python oci_retry.py
-
-# Run Micro version
-python oci_retry_micro.py
-```
-
-Run the offline configuration checks with:
-
-```bash
-make test
-```
-
-### Local OCI Config File Required
-
-**Location**: `~/.oci/config` (on Windows: `C:\Users\YourName\.oci\config`, no file extension)
-
-```
-[DEFAULT]
-user=ocid1.user.oc1..xxxxxx
-fingerprint=xx:xx:xx:xx:xx
-tenancy=ocid1.tenancy.oc1..xxxxxx
-region=ap-singapore-1
-key_file=C:\Users\YourName\Desktop\private-key.pem
-```
-
-**How to get config values**:
-1. Oracle Cloud Console → top-right avatar → **User settings**
-2. Left menu → **My profile** → top menu → **Tokens and keys** → **Add API key**
-3. Choose **Generate API key pair** → download the private key (`.pem` file)
-4. Click **Add** → copy the configuration snippet that appears, paste it into your `config` file
-5. Update `key_file` to the actual path of your `.pem` file
-
 ### Script Behavior
 
 | Status | Description |
@@ -141,22 +78,6 @@ key_file=C:\Users\YourName\Desktop\private-key.pem
 | Out of capacity | Prints ❌ and keeps retrying |
 | Network timeout | Prints ⚠️ and keeps retrying (won't crash) |
 | Success | Prints ✅ instance ID and stops automatically |
-
----
-
-## Container build and run
-
-```bash
-docker build --tag oci-arm-retry .
-docker run --rm \
-  --env-file .env \
-  --volume "$HOME/.oci:/root/.oci:ro" \
-  oci-arm-retry
-```
-
-The container runs the ARM retry script by default. It uses the pinned dependency in `requirements.txt` and the mounted OCI config for authentication.
-
----
 
 ## GitHub Actions — Automated 24/7 Retry (Recommended)
 
@@ -178,7 +99,7 @@ If the chain breaks: manually go to the Actions tab and click Run workflow again
 |------|---------|
 | Duration per Job | ~330 minutes (~220 attempts) |
 | Relay method | Auto-triggers next Job on exit, virtually no gap |
-| Max concurrency | 1 running + 1 queued (no pile-up) |
+| Max concurrency | 1 active run; duplicate runs are replaced |
 | If chain breaks | Manually trigger from Actions tab |
 | After success | Workflow auto-disables — no manual action needed |
 | ARM vs Micro | Separate workflows, can run simultaneously |
@@ -272,17 +193,6 @@ ssh -i private-key.pem ubuntu@your-public-ip
 
 ---
 
-## 兩種使用方式
-
-| 方式 | 適合對象 | 優點 | 缺點 |
-|------|---------|------|------|
-| 本機執行 | 想快速試試 | 不需要 GitHub 帳號設定 | 電腦要一直開著 |
-| GitHub Actions（推薦）| 長期自動搶機 | 24 小時不間斷，不佔電腦資源 | 需要 **public 倉庫** + 設定 Secrets |
-
-> 💡 **為什麼需要 public 倉庫？** Public 倉庫可以免費使用無限制的 GitHub Actions 分鐘數。Private 倉庫每月有上限。
-
----
-
 ## 腳本設定
 
 腳本會從環境變數讀取帳號相關設定；在 GitHub Actions 中，請設定下方列出的 repository secrets。
@@ -296,16 +206,11 @@ BOOT_VOLUME_SIZE_IN_GBS = 100
 RETRY_INTERVAL = 90  # 重試間隔（秒）
 ```
 
-本機執行前，請先設定 `OCI_COMPARTMENT_ID`、`OCI_SSH_PUBLIC_KEY`，以及可選的 `OCI_INSTANCE_NAME` 環境變數。
-
 > ARM 腳本現在把 `BOOT_VOLUME_SIZE_IN_GBS` 抽成可調整的設定變數，預設為 `100 GB`。這比舊版 `200 GB` 更安全，較不容易一次把 Always Free 的 `200 GB` 區域儲存額度吃滿。
 
 ### Micro 腳本：`oci_retry_micro.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..你的OCID"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...你的公開金鑰內容"
-INSTANCE_NAME  = "micro-server"   # 搶第二台時改成 "micro-server-2"，方便在 OCI Console 區分
 BOOT_VOLUME_SIZE_IN_GBS = 50
 RETRY_INTERVAL = 90  # 重試間隔（秒）
 ```
@@ -333,39 +238,6 @@ RETRY_INTERVAL = 90  # 重試間隔（秒）
 或在本機執行 `ssh-keygen` 自己產生。
 
 ---
-
-## 本機執行
-
-```bash
-# 安裝套件（只需一次）
-pip install oci
-
-# 執行 ARM 版
-python oci_retry.py
-
-# 執行 Micro 版
-python oci_retry_micro.py
-```
-
-### 本機執行需要 OCI 設定檔
-
-**儲存位置**：`C:\Users\你的帳號\.oci\config`（建立資料夾和檔案，檔案無副檔名）
-
-```
-[DEFAULT]
-user=ocid1.user.oc1..xxxxxx
-fingerprint=xx:xx:xx:xx:xx
-tenancy=ocid1.tenancy.oc1..xxxxxx
-region=ap-singapore-1
-key_file=C:\Users\你的帳號\Desktop\私密金鑰.pem
-```
-
-**取得設定檔內容**：
-1. Oracle Cloud 主控台 → 右上角頭像 → **使用者設定值**（User settings）
-2. 左側選單 → **我的設定檔**（My profile）→ 上方選單 → **權杖和金鑰**（Tokens and keys）→ **新增 API 金鑰**（Add API key）
-3. 選「**產生 API 金鑰組**」（Generate API key pair）→ 下載私密金鑰（`.pem` 檔）
-4. 按「新增」→ 複製出現的設定文字，貼入 `config` 檔
-5. 把 `key_file` 的路徑改成 `.pem` 檔的實際存放位置
 
 ### 腳本執行行為
 
@@ -399,7 +271,7 @@ Job 開始
 |------|------|
 | 每次 Job 持續時間 | 約 330 分鐘（~220 次嘗試）|
 | 接力方式 | Job 結束時自動觸發下一個，空窗幾乎為零 |
-| 同時執行上限 | 最多 1 個跑 + 1 個排隊（不會累積）|
+| 同時執行上限 | 只保留 1 個執行中的 run；重複 run 會被取代 |
 | 鏈條中斷時 | 手動到 Actions 頁籤再按一次 Run workflow |
 | 搶到後 | workflow 自動停用，完全不需要手動操作 |
 | ARM 與 Micro | 各自獨立 workflow，可同時執行互不干擾 |
