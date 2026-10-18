@@ -5,18 +5,21 @@ import datetime
 
 # ╔══════════════════════════════════════════════════════╗
 # ║  Target : VM.Standard.A1.Flex (ARM)                  ║
-# ║  Spec   : 2 OCPU / 12 GB RAM / 100 GB disk (default) ║
+# ║  Spec   : 1 OCPU / 6 GB RAM / 100 GB disk (default)  ║
 # ║  Arch   : ARM (Ampere)                               ║
 # ║  Tier   : Oracle Always Free                         ║
-# ║  OS     : Canonical Ubuntu 22.04                     ║
+# ║  OS     : Canonical Ubuntu 24.04 (aarch64)            ║
 # ╚══════════════════════════════════════════════════════╝
 
 # ─── Configuration (from environment / GitHub Secrets) ───
 COMPARTMENT_ID = os.environ["OCI_COMPARTMENT_ID"]
 SSH_PUBLIC_KEY = os.environ["OCI_SSH_PUBLIC_KEY"]
 INSTANCE_NAME = os.environ.get("OCI_INSTANCE_NAME", "streamlit-server")
-ARM_OCPUS = 2
-ARM_MEMORY_IN_GBS = 12
+ARM_SHAPE = "VM.Standard.A1.Flex"
+UBUNTU_OS = "Canonical Ubuntu"
+UBUNTU_VERSION = "24.04"
+ARM_OCPUS = 1
+ARM_MEMORY_IN_GBS = 6
 BOOT_VOLUME_SIZE_IN_GBS = 100
 RETRY_INTERVAL = 90  # seconds
 # ────────────────────────────────────────────────────────
@@ -41,14 +44,14 @@ def get_ubuntu_arm_image():
     compute = oci.core.ComputeClient(config)
     images = compute.list_images(
         COMPARTMENT_ID,
-        operating_system="Canonical Ubuntu",
-        operating_system_version="22.04",
-        shape="VM.Standard.A1.Flex",
+        operating_system=UBUNTU_OS,
+        operating_system_version=UBUNTU_VERSION,
+        shape=ARM_SHAPE,
         sort_by="TIMECREATED",
         sort_order="DESC",
     ).data
     if not images:
-        raise Exception("Ubuntu 22.04 ARM image not found")
+        raise Exception("Ubuntu 24.04 ARM64 image not found")
     return images[0].id
 
 
@@ -147,7 +150,7 @@ def try_create_instance(subnet_id, ad_name, image_id):
             compartment_id=COMPARTMENT_ID,
             display_name=INSTANCE_NAME,
             availability_domain=ad_name,
-            shape="VM.Standard.A1.Flex",
+            shape=ARM_SHAPE,
             shape_config=oci.core.models.LaunchInstanceShapeConfigDetails(
                 ocpus=ARM_OCPUS,
                 memory_in_gbs=ARM_MEMORY_IN_GBS,
@@ -174,7 +177,7 @@ def main():
     ad_name = get_availability_domain()
     print(f"AD: {ad_name}")
 
-    print("Fetching Ubuntu 22.04 ARM image...")
+    print("Fetching Ubuntu 24.04 ARM64 image...")
     image_id = get_ubuntu_arm_image()
     print(f"Image ID: {image_id}")
 

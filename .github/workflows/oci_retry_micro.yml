@@ -3,6 +3,10 @@ name: OCI Micro Retry
 on:
   workflow_dispatch:  # Manual trigger only
 
+permissions:
+  actions: write       # Disable this workflow after a successful claim and dispatch the next run
+  contents: read
+
 concurrency:
   group: oci-retry-micro      # Separate from ARM workflow, no interference
   cancel-in-progress: false   # Do not cancel running jobs; new ones queue (max 1 running + 1 waiting)
@@ -24,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install OCI SDK
-        run: pip install oci
+        run: pip install --requirement requirements.txt
 
       - name: Set up OCI credentials
         env:
@@ -65,19 +69,30 @@ jobs:
 
       - name: Auto-disable workflow on success
         if: steps.run_script.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          curl -sS --fail -X PUT \
-            -H "Authorization: token ${{ secrets.GH_PAT }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/oci_retry_micro.yml/disable
+          gh api --method PUT \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/oci_retry_micro.yml/disable"
           echo "Workflow auto-disabled"
 
       - name: Trigger next Job (seamless relay)
         if: steps.run_script.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          WORKFLOW_REF: ${{ github.ref_name }}
         run: |
-          curl -sS --fail -X POST \
-            -H "Authorization: token ${{ secrets.GH_PAT }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/oci_retry_micro.yml/dispatches \
-            -d '{"ref":"main"}'
-          echo "Next Job triggered"
+          for attempt in 1 2 3; do
+            if gh api --method POST \
+              "/repos/${GITHUB_REPOSITORY}/actions/workflows/oci_retry_micro.yml/dispatches" \
+              -f "ref=${WORKFLOW_REF}"; then
+              echo "Next Job triggered from ${WORKFLOW_REF}"
+              exit 0
+            fi
+            echo "Dispatch attempt ${attempt} failed; retrying..." >&2
+            sleep 15
+          done
+          echo "Unable to dispatch the next retry job" >&2
+          exit 1

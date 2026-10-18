@@ -13,12 +13,12 @@ Automated retry scripts to claim Oracle Cloud Always Free VMs (ARM A1.Flex / x86
 
 | Script | Instance Type | Spec | Architecture |
 |--------|--------------|------|--------------|
-| `oci_retry.py` | VM.Standard.A1.Flex | 2 OCPU / 12 GB RAM / 100 GB disk | ARM (Ampere) |
+| `oci_retry.py` | VM.Standard.A1.Flex | 1 OCPU / 6 GB RAM / 100 GB disk | ARM (Ampere / aarch64) |
 | `oci_retry_micro.py` | VM.Standard.E2.1.Micro | 1 OCPU / 1 GB RAM / 50 GB disk | x86 |
 
-Both are part of the Oracle Always Free tier. As of June 15, 2026, Oracle documents Always Free Ampere A1 as a total of 2 OCPUs + 12 GB memory per tenancy, while Micro remains available for up to 2 instances.
+Both are part of the Oracle Always Free tier. The ARM script uses half of Oracle's documented Always Free Ampere A1 allowance: 1 OCPU + 6 GB memory. Micro remains available for up to 2 instances.
 
-> 📌 **Always Free update (June 15, 2026):** Oracle's official Always Free page now documents Ampere A1 as **2 OCPUs + 12 GB RAM** per tenancy, and free boot volume + block volume storage as **200 GB total per region**.  
+> 📌 **Always Free reference (June 15, 2026):** Oracle's official Always Free page documents Ampere A1 as **2 OCPUs + 12 GB RAM** per tenancy, and free boot volume + block volume storage as **200 GB total per region**.
 > Official source: https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
 
 ---
@@ -36,19 +36,18 @@ Both are part of the Oracle Always Free tier. As of June 15, 2026, Oracle docume
 
 ## Script Configuration
 
-Open the script and edit the variables at the top:
+The scripts read account-specific values from environment variables. In GitHub Actions, set the matching repository secrets listed below.
 
 ### ARM script: `oci_retry.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..your-ocid"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...your-public-key"
-INSTANCE_NAME = "streamlit-server"
-ARM_OCPUS = 2
-ARM_MEMORY_IN_GBS = 12
+ARM_OCPUS = 1
+ARM_MEMORY_IN_GBS = 6
 BOOT_VOLUME_SIZE_IN_GBS = 100
 RETRY_INTERVAL = 90  # Retry interval in seconds
 ```
+
+For local runs, export `OCI_COMPARTMENT_ID`, `OCI_SSH_PUBLIC_KEY`, and optionally `OCI_INSTANCE_NAME` before starting the script.
 
 > The ARM script now exposes `BOOT_VOLUME_SIZE_IN_GBS` as a configuration variable. The default is `100 GB`, which is safer under the Always Free `200 GB` regional storage quota than the old `200 GB` default.
 
@@ -89,14 +88,28 @@ Or generate your own key locally with `ssh-keygen`.
 ## Run Locally
 
 ```bash
-# Install dependencies (once only)
-pip install oci
+# Create an isolated environment and install the pinned OCI SDK
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --requirement requirements.txt
+
+# Copy .env.example to .env, replace its placeholders, then load it
+cp .env.example .env
+set -a
+. .env
+set +a
 
 # Run ARM version
 python oci_retry.py
 
 # Run Micro version
 python oci_retry_micro.py
+```
+
+Run the offline configuration checks with:
+
+```bash
+make test
 ```
 
 ### Local OCI Config File Required
@@ -128,6 +141,20 @@ key_file=C:\Users\YourName\Desktop\private-key.pem
 | Out of capacity | Prints ❌ and keeps retrying |
 | Network timeout | Prints ⚠️ and keeps retrying (won't crash) |
 | Success | Prints ✅ instance ID and stops automatically |
+
+---
+
+## Container build and run
+
+```bash
+docker build --tag oci-arm-retry .
+docker run --rm \
+  --env-file .env \
+  --volume "$HOME/.oci:/root/.oci:ro" \
+  oci-arm-retry
+```
+
+The container runs the ARM retry script by default. It uses the pinned dependency in `requirements.txt` and the mounted OCI config for authentication.
 
 ---
 
@@ -172,25 +199,11 @@ Create a **public** repository (public repos get unlimited Actions minutes).
 4. Click **Add** → from the configuration snippet, note these values:
    - `user`, `fingerprint`, `tenancy`, `region`
 
-### Step 3: Create a GitHub Personal Access Token (PAT)
-
-The PAT allows the workflow to auto-disable itself after success, or trigger the next Job.
-
-1. GitHub → top-right avatar → **Settings**
-2. Bottom of left sidebar → **Developer settings**
-3. **Personal access tokens** → **Tokens (classic)**
-4. **Generate new token (classic)**
-5. Fill in:
-   - **Note**: any name, e.g. `oci-retry`
-   - **Expiration**: as needed (recommend 90 days or No expiration)
-   - **Scopes**: check **`workflow`** (required to manage workflows)
-6. Click **Generate token** → **copy immediately** (shown only once)
-
-### Step 4: Set GitHub Secrets
+### Step 3: Set GitHub Secrets
 
 Go to your repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-You need **6 secrets** in total:
+You need **7 secrets** in total:
 
 | Secret Name | Value | Where to Get It |
 |-------------|-------|----------------|
@@ -199,9 +212,12 @@ You need **6 secrets** in total:
 | `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | Oracle Console → My profile → Tenancy OCID |
 | `OCI_REGION` | e.g. `ap-singapore-1` | Oracle Console top-right region name |
 | `OCI_PRIVATE_KEY` | Full contents of `.pem` file | Open the `.pem` from Step 2, copy everything (including `-----BEGIN/END PRIVATE KEY-----`) |
-| `GH_PAT` | GitHub Personal Access Token | Token generated in Step 3 |
+| `OCI_COMPARTMENT_ID` | Tenancy or compartment OCID | The compartment where the instance and network will be created |
+| `OCI_SSH_PUBLIC_KEY` | Full contents of your SSH `.pub` file | The public key installed on the new instance |
 
-### Step 5: Push Code to GitHub
+The workflow uses GitHub's built-in token with `actions: write` permission to relay the next run and disable itself after success. No `GH_PAT` is required.
+
+### Step 4: Push Code to GitHub
 
 ```bash
 git remote add origin https://github.com/your-username/your-repo.git
@@ -209,7 +225,7 @@ git branch -M main
 git push -u origin main
 ```
 
-### Step 6: Start the Workflow
+### Step 5: Start the Workflow
 
 1. Go to your repository → **Actions** tab
 2. If the workflow shows as disabled, click **Enable workflow**
@@ -233,8 +249,7 @@ ssh -i private-key.pem ubuntu@your-public-ip
 
 ## Notes
 
-- `COMPARTMENT_ID` and `SSH_PUBLIC_KEY` in the script are safe to commit (non-sensitive)
-- Sensitive values (OCI API private key, PAT) are stored in GitHub Secrets and never committed
+- OCI API credentials, the compartment ID, and SSH public key are stored in GitHub Secrets and never committed
 - `.pem` / `.key` / `.pub` files are in `.gitignore` and won't be tracked
 
 ---
@@ -247,12 +262,12 @@ ssh -i private-key.pem ubuntu@your-public-ip
 
 | 腳本 | 目標機型 | 規格 | 架構 |
 |------|---------|------|------|
-| `oci_retry.py` | VM.Standard.A1.Flex | 2 OCPU / 12 GB RAM / 100 GB 磁碟 | ARM (Ampere) |
+| `oci_retry.py` | VM.Standard.A1.Flex | 1 OCPU / 6 GB RAM / 100 GB 磁碟 | ARM (Ampere / aarch64) |
 | `oci_retry_micro.py` | VM.Standard.E2.1.Micro | 1 OCPU / 1 GB RAM / 50 GB 磁碟 | x86 |
 
-兩種都是 Oracle Always Free 永久免費方案。從 `2026-06-15` 起，Oracle 官方文件已將 Always Free Ampere A1 配額更新為每個 tenancy 總共 `2 OCPU + 12 GB RAM`，Micro 則仍可最多建立 2 台。
+兩種都是 Oracle Always Free 永久免費方案。ARM 腳本使用 Oracle 官方 Always Free Ampere A1 配額的一半：`1 OCPU + 6 GB RAM`，Micro 則仍可最多建立 2 台。
 
-> 📌 **官方更新（2026-06-15 起）：** Oracle 官方 Always Free 頁面現在明確寫明 Ampere A1 為每個 tenancy **2 OCPU + 12 GB RAM**，而免費的 boot volume + block volume 儲存總額則是 **每個 region 共 200 GB**。  
+> 📌 **官方參考（2026-06-15 起）：** Oracle 官方 Always Free 頁面明確寫明 Ampere A1 為每個 tenancy **2 OCPU + 12 GB RAM**，而免費的 boot volume + block volume 儲存總額則是 **每個 region 共 200 GB**。
 > 官方來源：https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
 
 ---
@@ -270,19 +285,18 @@ ssh -i private-key.pem ubuntu@your-public-ip
 
 ## 腳本設定
 
-開啟腳本，修改最上方的變數：
+腳本會從環境變數讀取帳號相關設定；在 GitHub Actions 中，請設定下方列出的 repository secrets。
 
 ### ARM 腳本：`oci_retry.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..你的OCID"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...你的公開金鑰內容"
-INSTANCE_NAME = "streamlit-server"
-ARM_OCPUS = 2
-ARM_MEMORY_IN_GBS = 12
+ARM_OCPUS = 1
+ARM_MEMORY_IN_GBS = 6
 BOOT_VOLUME_SIZE_IN_GBS = 100
 RETRY_INTERVAL = 90  # 重試間隔（秒）
 ```
+
+本機執行前，請先設定 `OCI_COMPARTMENT_ID`、`OCI_SSH_PUBLIC_KEY`，以及可選的 `OCI_INSTANCE_NAME` 環境變數。
 
 > ARM 腳本現在把 `BOOT_VOLUME_SIZE_IN_GBS` 抽成可調整的設定變數，預設為 `100 GB`。這比舊版 `200 GB` 更安全，較不容易一次把 Always Free 的 `200 GB` 區域儲存額度吃滿。
 
@@ -406,25 +420,11 @@ Job 開始
 4. 按「新增」後複製出現的設定文字，從中取得以下值：
    - `user`、`fingerprint`、`tenancy`、`region`
 
-### Step 3：建立 GitHub Personal Access Token（PAT）
-
-PAT 讓 workflow 搶到機器後能自動停用自己、或接力觸發下一個 Job。
-
-1. GitHub → 右上角頭像 → **Settings**
-2. 左側最下方 → **Developer settings**
-3. **Personal access tokens** → **Tokens (classic)**
-4. **Generate new token (classic)**
-5. 填寫：
-   - **Note**：隨意命名，例如 `oci-retry`
-   - **Expiration**：依需求設定（建議 90 天或 No expiration）
-   - **Scopes**：勾選 **`workflow`**（必須勾，才能操作 workflow）
-6. 點 **Generate token** → **立刻複製**產生的 token（只顯示一次）
-
-### Step 4：設定 GitHub Secrets
+### Step 3：設定 GitHub Secrets
 
 到倉庫 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-共需設定 **6 個** secret：
+共需設定 **7 個** secret：
 
 | Secret 名稱 | 填入的值 | 取得位置 |
 |------------|---------|----------|
@@ -433,9 +433,12 @@ PAT 讓 workflow 搶到機器後能自動停用自己、或接力觸發下一個
 | `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | OCI 主控台 → 右上角頭像 → 租用戶: XXX → 租用戶 OCID |
 | `OCI_REGION` | 例如 `ap-singapore-1` | OCI 主控台右上角區域名稱 |
 | `OCI_PRIVATE_KEY` | `.pem` 檔案完整內容 | 開啟 Step 2 下載的 `.pem` 檔，複製全部文字（含頭尾 `-----BEGIN/END PRIVATE KEY-----`）|
-| `GH_PAT` | GitHub Personal Access Token | Step 3 產生的 token |
+| `OCI_COMPARTMENT_ID` | 租用戶或 compartment OCID | 建立 instance 和網路資源的 compartment |
+| `OCI_SSH_PUBLIC_KEY` | SSH `.pub` 檔案完整內容 | 安裝到新 instance 的公開金鑰 |
 
-### Step 5：推送程式碼到 GitHub
+workflow 使用具備 `actions: write` 權限的 GitHub 內建 token 接力下一次執行，成功後也會自動停用自己，不需要 `GH_PAT`。
+
+### Step 4：推送程式碼到 GitHub
 
 ```bash
 git remote add origin https://github.com/你的帳號/你的倉庫名稱.git
@@ -443,7 +446,7 @@ git branch -M main
 git push -u origin main
 ```
 
-### Step 6：啟動 workflow
+### Step 5：啟動 workflow
 
 1. 到倉庫 → **Actions** 頁籤
 2. 若 workflow 顯示停用，點 **Enable workflow**
@@ -467,6 +470,5 @@ ssh -i 私密金鑰.pem ubuntu@公用IP
 
 ## 注意事項
 
-- `COMPARTMENT_ID` 和 `SSH_PUBLIC_KEY` 寫在腳本裡是安全的（非機密資訊）
-- OCI API 私密金鑰、PAT 等敏感資訊全部放在 GitHub Secrets，不進版本控制
+- OCI API 憑證、compartment ID 和 SSH 公開金鑰全部放在 GitHub Secrets，不進版本控制
 - `.pem` / `.key` / `.pub` 已加入 `.gitignore`，不會被 commit
