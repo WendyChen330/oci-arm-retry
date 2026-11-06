@@ -56,14 +56,20 @@ jobs:
           EOF
 
       - name: Run OCI retry script
-        # Script succeeds (exit 0)  → next step auto-disables the workflow
-        # Timeout expires (exit 124) → treated as failure, triggers next Job
+        # Exit 0          → instance created → auto-disable the workflow
+        # Exit 124        → time limit reached (no capacity yet) → trigger next Job
+        # Any other exit  → script error (e.g. wrong secrets/OCID) → stop the chain
         # timeout 19800s = 330 min, 25 min less than job timeout 355 min (buffer for setup steps)
         id: run_script
         continue-on-error: true
         env:
           PYTHONUNBUFFERED: "1"
-        run: timeout 19800 python oci_retry.py
+        run: |
+          set +e
+          timeout 19800 python oci_retry.py
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
 
       # Relay / disable use the job's built-in GITHUB_TOKEN (no PAT needed):
       # workflow_dispatch is an allowed exception to "GITHUB_TOKEN events don't start new runs".
@@ -84,8 +90,16 @@ jobs:
           }
           echo "Workflow auto-disabled"
 
+      - name: Stop chain on script error
+        if: steps.run_script.outcome != 'success' && steps.run_script.outputs.exit_code != '124'
+        env:
+          EXIT_CODE: ${{ steps.run_script.outputs.exit_code }}
+        run: |
+          echo "::error title=Script error::The retry script stopped with exit code $EXIT_CODE before its time limit, so the next Job was not triggered. Check the 'Run OCI retry script' log (e.g. secrets or OCIDs), fix the problem, then click Run workflow again."
+          exit 1
+
       - name: Trigger next Job (seamless relay)
-        if: steps.run_script.outcome != 'success'
+        if: steps.run_script.outputs.exit_code == '124'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}

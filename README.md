@@ -159,6 +159,7 @@ No need to keep your computer running. GitHub Actions retries continuously, 24 h
 Job starts
   └─ Attempts every 90 seconds for ~330 minutes (~220 tries)
        ├─ Instance claimed → workflow auto-disables, done
+       ├─ Script error (e.g. wrong secrets) → chain stops with an error message
        └─ Timeout → immediately triggers next Job (virtually no gap)
                         └─ Repeats...
 
@@ -168,8 +169,9 @@ If the chain breaks: manually go to the Actions tab and click Run workflow again
 | Item | Details |
 |------|---------|
 | Duration per Job | ~330 minutes (~220 attempts) |
-| Relay method | Auto-triggers next Job on exit, virtually no gap |
+| Relay method | Auto-triggers next Job when the time limit is reached, virtually no gap |
 | Max concurrency | 1 running + 1 queued (no pile-up) |
+| On script error | Chain stops and shows an error; fix the problem, then click Run workflow again |
 | If chain breaks | Manually trigger from Actions tab |
 | After success | Workflow auto-disables — no manual action needed |
 | ARM vs Micro | Separate workflows, can run simultaneously |
@@ -399,6 +401,7 @@ key_file=C:\Users\你的帳號\Desktop\私密金鑰.pem
 Job 開始
   └─ 每 90 秒嘗試一次，持續約 330 分鐘（~220 次）
        ├─ 搶到了 → 自動停用 workflow，結束
+       ├─ 腳本出錯（例如 secrets 填錯）→ 鏈條停止，並顯示錯誤訊息
        └─ timeout → 立刻觸發下一個 Job，空窗幾乎為零
                         └─ 重複循環...
 
@@ -408,8 +411,9 @@ Job 開始
 | 項目 | 說明 |
 |------|------|
 | 每次 Job 持續時間 | 約 330 分鐘（~220 次嘗試）|
-| 接力方式 | Job 結束時自動觸發下一個，空窗幾乎為零 |
+| 接力方式 | 時間到時自動觸發下一個，空窗幾乎為零 |
 | 同時執行上限 | 最多 1 個跑 + 1 個排隊（不會累積）|
+| 腳本出錯時 | 鏈條停止並顯示錯誤訊息；修正問題後再按一次 Run workflow |
 | 鏈條中斷時 | 手動到 Actions 頁籤再按一次 Run workflow |
 | 搶到後 | workflow 自動停用，完全不需要手動操作 |
 | ARM 與 Micro | 各自獨立 workflow，可同時執行互不干擾 |
