@@ -43,14 +43,15 @@ Open the script and edit the variables at the top:
 ```python
 COMPARTMENT_ID = "ocid1.tenancy.oc1..your-ocid"
 SSH_PUBLIC_KEY = "ssh-rsa AAAA...your-public-key"
-INSTANCE_NAME = "streamlit-server"
+INSTANCE_NAME = "arm-server"
+UBUNTU_VERSION = "24.04"  # OS for the new instance: "24.04" (default), "26.04" or "22.04"
 ARM_OCPUS = 2
 ARM_MEMORY_IN_GBS = 12
 BOOT_VOLUME_SIZE_IN_GBS = 100
 RETRY_INTERVAL = 90  # Retry interval in seconds
 ```
 
-> The ARM script now exposes `BOOT_VOLUME_SIZE_IN_GBS` as a configuration variable. The default is `100 GB`, which is safer under the Always Free `200 GB` regional storage quota than the old `200 GB` default.
+> `BOOT_VOLUME_SIZE_IN_GBS` sets the boot volume size. Always Free includes `200 GB` of boot + block volume storage in total; the ARM default of `100 GB` leaves room for two Micro instances (`50 GB` each). Lower `BOOT_VOLUME_SIZE_IN_GBS` if you also use other volumes.
 
 ### Micro script: `oci_retry_micro.py`
 
@@ -58,11 +59,26 @@ RETRY_INTERVAL = 90  # Retry interval in seconds
 COMPARTMENT_ID = "ocid1.tenancy.oc1..your-ocid"
 SSH_PUBLIC_KEY = "ssh-rsa AAAA...your-public-key"
 INSTANCE_NAME  = "micro-server"   # Change to "micro-server-2" when claiming your second Micro instance
+UBUNTU_VERSION = "24.04"  # OS for the new instance: "24.04" (default), "26.04" or "22.04"
 BOOT_VOLUME_SIZE_IN_GBS = 50
 RETRY_INTERVAL = 90  # Retry interval in seconds
 ```
 
 > Each OCI account can have up to **2 free Micro instances**. To claim a second one, change `INSTANCE_NAME` to a different value (e.g. `"micro-server-2"`) so both instances can be identified separately in the OCI Console. The VCN and subnet are shared between instances automatically.
+
+> ⚠️ **Regions with multiple availability domains (ADs):** Oracle's [Always Free page](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm) states that Micro instances "can only be created in one availability domain", but does not say which one. The scripts always use the **first** AD returned by the API (`ads[0]` in `get_availability_domain()`). If your region has several ADs and the Micro script never succeeds, check your Micro limit per AD in the OCI Console (search for **Limits, Quotas and Usage**), then change `ads[0]` to the index of that AD. Regions with a single AD (e.g. `ap-singapore-1`) are not affected.
+
+### Ubuntu version (both scripts)
+
+`UBUNTU_VERSION` sets which Ubuntu LTS is installed on the **new** instance. The script always picks the newest Oracle image build of that version. Changing it only affects instances created afterwards; instances you already have keep their OS.
+
+| Version | Standard security updates until | Default Python |
+|---------|-------------------------------|----------------|
+| `"26.04"` | May 2031 | 3.14 |
+| `"24.04"` (default) | May 2029 | 3.12 |
+| `"22.04"` | May 2027 | 3.10 |
+
+Sources: [Ubuntu release cycle](https://ubuntu.com/about/release-cycle), [python3-defaults](https://launchpad.net/ubuntu/+source/python3-defaults).
 
 ### Get Compartment ID (Tenancy OCID)
 
@@ -128,6 +144,8 @@ key_file=C:\Users\YourName\Desktop\private-key.pem
 | Out of capacity | Prints ❌ and keeps retrying |
 | Network timeout | Prints ⚠️ and keeps retrying (won't crash) |
 | Success | Prints ✅ instance ID and stops automatically |
+
+> **Open ports:** When the script creates a new VCN, it opens inbound TCP **22 (SSH), 80 (HTTP) and 443 (HTTPS)** from anywhere (`0.0.0.0/0`). An existing VCN is reused as-is. To open other ports, add them to the port list in `create_vcn_and_subnet()` before the first run, or add ingress rules to the VCN's security list in the OCI Console later. On OCI Ubuntu images, the port must also be allowed in the instance's `iptables` — see the "Update firewall settings" step in Oracle's [Apache on Ubuntu tutorial](https://docs.oracle.com/en-us/iaas/developer-tutorials/tutorials/apache-on-ubuntu/01oci-ubuntu-apache-summary.htm).
 
 ---
 
@@ -265,14 +283,15 @@ ssh -i private-key.pem ubuntu@your-public-ip
 ```python
 COMPARTMENT_ID = "ocid1.tenancy.oc1..你的OCID"
 SSH_PUBLIC_KEY = "ssh-rsa AAAA...你的公開金鑰內容"
-INSTANCE_NAME = "streamlit-server"
+INSTANCE_NAME = "arm-server"
+UBUNTU_VERSION = "24.04"  # 新機器安裝的作業系統："24.04"（預設）、"26.04" 或 "22.04"
 ARM_OCPUS = 2
 ARM_MEMORY_IN_GBS = 12
 BOOT_VOLUME_SIZE_IN_GBS = 100
 RETRY_INTERVAL = 90  # 重試間隔（秒）
 ```
 
-> ARM 腳本現在把 `BOOT_VOLUME_SIZE_IN_GBS` 抽成可調整的設定變數，預設為 `100 GB`。這比舊版 `200 GB` 更安全，較不容易一次把 Always Free 的 `200 GB` 區域儲存額度吃滿。
+> `BOOT_VOLUME_SIZE_IN_GBS` 是開機磁碟（boot volume）的大小。Always Free 的 boot volume + block volume 儲存空間合計 `200 GB`；ARM 預設 `100 GB`，剩下的空間剛好夠兩台 Micro（各 `50 GB`）。如果你還有其他磁碟，請把 `BOOT_VOLUME_SIZE_IN_GBS` 調小。
 
 ### Micro 腳本：`oci_retry_micro.py`
 
@@ -280,11 +299,26 @@ RETRY_INTERVAL = 90  # 重試間隔（秒）
 COMPARTMENT_ID = "ocid1.tenancy.oc1..你的OCID"
 SSH_PUBLIC_KEY = "ssh-rsa AAAA...你的公開金鑰內容"
 INSTANCE_NAME  = "micro-server"   # 搶第二台時改成 "micro-server-2"，方便在 OCI Console 區分
+UBUNTU_VERSION = "24.04"  # 新機器安裝的作業系統："24.04"（預設）、"26.04" 或 "22.04"
 BOOT_VOLUME_SIZE_IN_GBS = 50
 RETRY_INTERVAL = 90  # 重試間隔（秒）
 ```
 
 > 每個 OCI 帳號最多可以有 **2 台免費 Micro**。搶第二台時，將 `INSTANCE_NAME` 改成不同的名稱（例如 `"micro-server-2"`），方便在 OCI Console 區分。VCN 和子網路會自動共用，不需要另外建立。
+
+> ⚠️ **有多個可用性網域（AD）的區域：** Oracle 官方 [Always Free 頁面](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)寫明 Micro 只能在其中一個 AD 建立，但沒有說是哪一個。腳本一律使用 API 回傳的**第一個** AD（`get_availability_domain()` 裡的 `ads[0]`）。如果你的區域有多個 AD，而 Micro 腳本一直搶不到，請到 OCI 主控台搜尋 **Limits, Quotas and Usage**，查看 Micro 的額度分配在哪個 AD，再把 `ads[0]` 改成那個 AD 的順序編號。只有一個 AD 的區域（例如 `ap-singapore-1`）不受影響。
+
+### Ubuntu 版本（兩支腳本通用）
+
+`UBUNTU_VERSION` 決定**新建立的機器**要安裝哪一版 Ubuntu LTS，腳本會自動挑該版本在 Oracle 上最新的映像檔。修改這個值只影響之後新建的機器，已經在運作的機器不會被改變。
+
+| 版本 | 標準安全更新到 | 內建 Python |
+|------|--------------|------------|
+| `"26.04"` | 2031 年 5 月 | 3.14 |
+| `"24.04"`（預設） | 2029 年 5 月 | 3.12 |
+| `"22.04"` | 2027 年 5 月 | 3.10 |
+
+資料來源：[Ubuntu 版本週期](https://ubuntu.com/about/release-cycle)、[python3-defaults](https://launchpad.net/ubuntu/+source/python3-defaults)。
 
 ### 取得 Compartment ID（租用戶 OCID）
 
@@ -350,6 +384,8 @@ key_file=C:\Users\你的帳號\Desktop\私密金鑰.pem
 | 容量不足 | 印出 ❌ 並繼續重試 |
 | 網路逾時 | 印出 ⚠️ 並繼續重試（不會當掉）|
 | 成功 | 印出 ✅ instance ID 並自動停止 |
+
+> **開放的 port：** 腳本建立新的 VCN 時，會對所有來源（`0.0.0.0/0`）開放 TCP **22（SSH）、80（HTTP）、443（HTTPS）**；如果 VCN 已經存在，則沿用原本的設定不做修改。需要其他 port 的話，可以在第一次執行前加進 `create_vcn_and_subnet()` 裡的 port 清單，或之後到 OCI 主控台，在 VCN 的安全清單（Security List）新增規則。另外，OCI 的 Ubuntu 映像檔還需要在機器的 `iptables` 放行該 port，做法請見 Oracle 官方 [Apache on Ubuntu 教學](https://docs.oracle.com/en-us/iaas/developer-tutorials/tutorials/apache-on-ubuntu/01oci-ubuntu-apache-summary.htm)的「Update firewall settings」步驟。
 
 ---
 

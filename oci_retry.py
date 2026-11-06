@@ -7,7 +7,7 @@ import datetime
 # ║  Spec   : 2 OCPU / 12 GB RAM / 100 GB disk (default) ║
 # ║  Arch   : ARM (Ampere)                               ║
 # ║  Tier   : Oracle Always Free                         ║
-# ║  OS     : Canonical Ubuntu 22.04                     ║
+# ║  OS     : Canonical Ubuntu 24.04 (UBUNTU_VERSION)    ║
 # ╚══════════════════════════════════════════════════════╝
 
 # ─── Configuration ───────────────────────────────────────
@@ -15,7 +15,8 @@ COMPARTMENT_ID = (
     "ocid1.tenancy.oc1..aaaaaaaaaqij5zlnm3v5qprvdll3j7nc6o3dk4ykzerugzxe37ckajkpjxpa"  # Replace with your tenancy OCID
 )
 SSH_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDdsLT/y7kupelr7rr+NcIyPVb4ZC20x9L5VuNMC5aYlXmSuqJQemXzdzfvp5F899CNdBe+TJJ+w55ka6C5J8vZTMmT4IfIOKZdJsKaTwOCbYTRz62PLcq90veNBPdn0kcnUxrqD3ReKxkKhyyL9WIWH1+4e945w9TL2wgr7Os0rYN5q/4Sa6ioof1I4NE9lGw+WL2yjOI0YLQXmWnvRb7qcQUdOCxgbOXw3GsPFwp3UZ+yJm8kbwFzJdTojaUeriuk3HQYFjzaOVN07kmf2vTQKSgsyw5B+BhyeYQmcRtNTNiriZ7skfS06/24ZM/hzLBz7/PQgw0DoRHDWB5YbyT1 ssh-key-2026-03-05"  # Replace with your SSH public key (.pub file content)
-INSTANCE_NAME = "streamlit-server"
+INSTANCE_NAME = "arm-server"
+UBUNTU_VERSION = "24.04"  # OS for the new instance: "24.04" (default), "26.04" or "22.04"
 ARM_OCPUS = 2
 ARM_MEMORY_IN_GBS = 12
 BOOT_VOLUME_SIZE_IN_GBS = 100
@@ -43,13 +44,13 @@ def get_ubuntu_arm_image():
     images = compute.list_images(
         COMPARTMENT_ID,
         operating_system="Canonical Ubuntu",
-        operating_system_version="22.04",
+        operating_system_version=UBUNTU_VERSION,
         shape="VM.Standard.A1.Flex",
         sort_by="TIMECREATED",
         sort_order="DESC",
     ).data
     if not images:
-        raise Exception("Ubuntu 22.04 ARM image not found")
+        raise Exception(f"Ubuntu {UBUNTU_VERSION} ARM image not found")
     return images[0].id
 
 
@@ -94,12 +95,12 @@ def create_vcn_and_subnet():
             ),
         )
 
-        # Open inbound ports: SSH / HTTP / HTTPS / Streamlit
+        # Open inbound ports: SSH / HTTP / HTTPS (add more ports to this list if needed)
         security_lists = network.list_security_lists(COMPARTMENT_ID, vcn_id=vcn.id).data
         if security_lists:
             existing_egress = security_lists[0].egress_security_rules
             new_ingress = []
-            for port in [22, 80, 443, 8501]:
+            for port in [22, 80, 443]:
                 new_ingress.append(
                     oci.core.models.IngressSecurityRule(
                         protocol="6",
@@ -175,7 +176,7 @@ def main():
     ad_name = get_availability_domain()
     print(f"AD: {ad_name}")
 
-    print("Fetching Ubuntu 22.04 ARM image...")
+    print(f"Fetching Ubuntu {UBUNTU_VERSION} ARM image...")
     image_id = get_ubuntu_arm_image()
     print(f"Image ID: {image_id}")
 

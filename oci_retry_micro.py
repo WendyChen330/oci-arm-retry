@@ -7,7 +7,7 @@ import datetime
 # ║  Spec   : 1 OCPU / 1 GB RAM / 50 GB disk (default)   ║
 # ║  Arch   : x86 (easier to claim than ARM)             ║
 # ║  Tier   : Oracle Always Free (max 2 per account)     ║
-# ║  OS     : Canonical Ubuntu 22.04                     ║
+# ║  OS     : Canonical Ubuntu 24.04 (UBUNTU_VERSION)    ║
 # ╚══════════════════════════════════════════════════════╝
 
 # ─── Configuration ───────────────────────────────────────
@@ -16,6 +16,7 @@ COMPARTMENT_ID = (
 )
 SSH_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCxPqVeut2vbwt8VVAvHDnEN+q61jrIAGD9cQgW6kTeLCjjzm9UHt2Flf1KoohSu+0YFvSn8+t67r9T9wfdP14WBfZAg531CCyUNTbF5KmkaHgmxftWu3FgY00BTnGa4YEEXdAGn3X953HzFKJDpJVJyWFfWXJUOWdfivTKlO+62SBnlIdcanckwA6rzr9dXNSYlasoVnuk+ujANjhnxf4TpKcI4AQrAmRJQ83lXfI2yExBMX+Qx/JNSA2/2XFRfT7OMgddExibCRpSyammfatNLUIM5s+ab6aeO3aNvVWGok6/dpYaBPbvndERQs6p9FQr88C/VFeEwHCtvMT8c2WB ssh-key-2026-03-07"  # Replace with your SSH public key (.pub file content)
 INSTANCE_NAME = "micro-server"  # Change for each new instance (e.g. "micro-server-2" for a second one)
+UBUNTU_VERSION = "24.04"  # OS for the new instance: "24.04" (default), "26.04" or "22.04"
 BOOT_VOLUME_SIZE_IN_GBS = 50
 RETRY_INTERVAL = 90  # seconds
 # ────────────────────────────────────────────────────────
@@ -41,13 +42,13 @@ def get_ubuntu_x86_image():
     images = compute.list_images(
         COMPARTMENT_ID,
         operating_system="Canonical Ubuntu",
-        operating_system_version="22.04",
+        operating_system_version=UBUNTU_VERSION,
         shape="VM.Standard.E2.1.Micro",
         sort_by="TIMECREATED",
         sort_order="DESC",
     ).data
     if not images:
-        raise Exception("Ubuntu 22.04 x86 image not found")
+        raise Exception(f"Ubuntu {UBUNTU_VERSION} x86 image not found")
     return images[0].id
 
 
@@ -92,12 +93,12 @@ def create_vcn_and_subnet():
             ),
         )
 
-        # Open inbound ports: SSH / HTTP / HTTPS / Streamlit
+        # Open inbound ports: SSH / HTTP / HTTPS (add more ports to this list if needed)
         security_lists = network.list_security_lists(COMPARTMENT_ID, vcn_id=vcn.id).data
         if security_lists:
             existing_egress = security_lists[0].egress_security_rules
             new_ingress = []
-            for port in [22, 80, 443, 8501]:
+            for port in [22, 80, 443]:
                 new_ingress.append(
                     oci.core.models.IngressSecurityRule(
                         protocol="6",
@@ -169,7 +170,7 @@ def main():
     ad_name = get_availability_domain()
     print(f"AD: {ad_name}")
 
-    print("Fetching Ubuntu 22.04 x86 image...")
+    print(f"Fetching Ubuntu {UBUNTU_VERSION} x86 image...")
     image_id = get_ubuntu_x86_image()
     print(f"Image ID: {image_id}")
 
