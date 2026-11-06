@@ -14,11 +14,15 @@ Automated retry scripts to claim Oracle Cloud Always Free VMs (ARM A1.Flex / x86
 | Script | Instance Type | Spec | Architecture |
 |--------|--------------|------|--------------|
 | `oci_retry.py` | VM.Standard.A1.Flex | 2 OCPU / 12 GB RAM / 100 GB disk | ARM (Ampere) |
-| `oci_retry_micro.py` | VM.Standard.E2.1.Micro | 1 OCPU / 1 GB RAM / 50 GB disk | x86 |
+| `oci_retry_micro.py` | VM.Standard.E2.1.Micro | 1/8 OCPU / 1 GB RAM / 50 GB disk | x86 |
 
-Both are part of the Oracle Always Free tier. As of June 15, 2026, Oracle documents Always Free Ampere A1 as a total of 2 OCPUs + 12 GB memory per tenancy, while Micro remains available for up to 2 instances.
+Both shapes are part of the Oracle Always Free tier. Always Free instances and volumes must be created in your tenancy's **home region**. The free allowance is:
 
-> 📌 **Always Free update (June 15, 2026):** Oracle's official Always Free page now documents Ampere A1 as **2 OCPUs + 12 GB RAM** per tenancy, and free boot volume + block volume storage as **200 GB total per region**.  
+- **Ampere A1:** 2 OCPUs + 12 GB RAM in total per tenancy
+- **Micro:** up to 2 instances (1/8 OCPU each, can burst higher)
+- **Storage:** 200 GB of boot + block volumes in total
+
+> 📌 **Always Free update (June 15, 2026):** Oracle's official Always Free page lowered the Ampere A1 allowance from 4 OCPUs + 24 GB RAM to **2 OCPUs + 12 GB RAM** per tenancy.  
 > Official source: https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
 
 ---
@@ -37,6 +41,8 @@ Both are part of the Oracle Always Free tier. As of June 15, 2026, Oracle docume
 ## Script Configuration
 
 Open the script and edit the variables at the top:
+
+> ⚠️ **Replace `COMPARTMENT_ID` and `SSH_PUBLIC_KEY` with your own values.**
 
 ### ARM script: `oci_retry.py`
 
@@ -84,7 +90,7 @@ Sources: [Ubuntu release cycle](https://ubuntu.com/about/release-cycle), [python
 
 **Purpose**: Tells Oracle which account to create resources under.
 
-1. Oracle Cloud Console → top-right avatar → **Tenancy: XXX**
+1. Oracle Cloud Console → top-right **Profile** menu → **Tenancy: XXX**
 2. Or: top-left menu → **Identity & Security** → **Identity** → **Compartments** → click root
 3. Copy the OCID (format: `ocid1.tenancy.oc1..xxxxxx`)
 
@@ -129,11 +135,12 @@ key_file=C:\Users\YourName\Desktop\private-key.pem
 ```
 
 **How to get config values**:
-1. Oracle Cloud Console → top-right avatar → **User settings**
+1. Oracle Cloud Console → top-right **Profile** menu → **User settings**
 2. Left menu → **My profile** → top menu → **Tokens and keys** → **Add API key**
 3. Choose **Generate API key pair** → download the private key (`.pem` file)
 4. Click **Add** → copy the configuration snippet that appears, paste it into your `config` file
 5. Update `key_file` to the actual path of your `.pem` file
+6. Make sure `region` is your tenancy's **home region**, because Always Free resources can only be created there. To find it, click the region name at the top right of the Console; the menu shows your **Home region** (e.g. `Singapore (Singapore)`). Use its Region Identifier (e.g. `ap-singapore-1`) from Oracle's [region list](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)
 
 ### Script Behavior
 
@@ -143,6 +150,8 @@ key_file=C:\Users\YourName\Desktop\private-key.pem
 | Retry loop | Attempts every `RETRY_INTERVAL` seconds |
 | Out of capacity | Prints ❌ and keeps retrying |
 | Network timeout | Prints ⚠️ and keeps retrying (won't crash) |
+| Other errors when creating the instance (e.g. limit reached) | Prints ❌ with the error message and keeps retrying — if it never succeeds, check the log |
+| Setup errors (e.g. wrong OCID or API key) | Stops with an error before the retry loop starts |
 | Success | Prints ✅ instance ID and stops automatically |
 
 > **Open ports:** When the script creates a new VCN, it opens inbound TCP **22 (SSH), 80 (HTTP) and 443 (HTTPS)** from anywhere (`0.0.0.0/0`). An existing VCN is reused as-is. To open other ports, add them to the port list in `create_vcn_and_subnet()` before the first run, or add ingress rules to the VCN's security list in the OCI Console later. On OCI Ubuntu images, the port must also be allowed in the instance's `iptables` — see the "Update firewall settings" step in Oracle's [Apache on Ubuntu tutorial](https://docs.oracle.com/en-us/iaas/developer-tutorials/tutorials/apache-on-ubuntu/01oci-ubuntu-apache-summary.htm).
@@ -173,8 +182,10 @@ If the chain breaks: manually go to the Actions tab and click Run workflow again
 | Max concurrency | 1 running + 1 queued (no pile-up) |
 | On script error | Chain stops and shows an error; fix the problem, then click Run workflow again |
 | If chain breaks | Manually trigger from Actions tab |
-| After success | Workflow auto-disables — no manual action needed |
-| ARM vs Micro | Separate workflows, can run simultaneously |
+| After success | Workflow auto-disables; if that fails, the run shows an "Auto-disable failed" error and you disable it manually |
+| ARM vs Micro | Separate workflows — **running only one at a time is recommended** |
+
+> ⚠️ Both workflows use the same OCI account. Running ARM and Micro at the same time with the default `RETRY_INTERVAL` (90 seconds) causes OCI to return `TooManyRequests` errors. We recommend not starting both workflows at the same time.
 
 ---
 
@@ -186,7 +197,7 @@ Create a **public** repository (public repos get unlimited Actions minutes).
 
 ### Step 2: Generate OCI API Key
 
-1. Oracle Cloud Console → top-right avatar → **User settings**
+1. Oracle Cloud Console → top-right **Profile** menu → **User settings**
 2. Left menu → **My profile** → top menu → **Tokens and keys** → **Add API key**
 3. Choose **Generate API key pair** → download the private key (`.pem` file)
 4. Click **Add** → from the configuration snippet, note these values:
@@ -202,8 +213,8 @@ You need **5 secrets** in total:
 |-------------|-------|----------------|
 | `OCI_USER` | `ocid1.user.oc1..xxxxxx` | Oracle Console → My profile → OCID |
 | `OCI_FINGERPRINT` | `xx:xx:xx:xx:xx` | Oracle Console → My profile → API keys → Fingerprint |
-| `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | Oracle Console → My profile → Tenancy OCID |
-| `OCI_REGION` | e.g. `ap-singapore-1` | Oracle Console top-right region name |
+| `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | Oracle Console → top-right **Profile** menu → **Tenancy: &lt;name&gt;** → OCID |
+| `OCI_REGION` | e.g. `ap-singapore-1` | Your **home region**: click the region name at the top right of the Oracle Console; the menu shows **Home region** (e.g. `Singapore (Singapore)`). Enter its Region Identifier (e.g. `ap-singapore-1`, see the [region list](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)). Always Free resources can only be created there |
 | `OCI_PRIVATE_KEY` | Full contents of `.pem` file | Open the `.pem` from Step 2, copy everything (including `-----BEGIN/END PRIVATE KEY-----`) |
 
 > No GitHub token is needed: relaying to the next Job and auto-disabling use the workflow's built-in `GITHUB_TOKEN`, which GitHub creates for each Job automatically.
@@ -222,13 +233,13 @@ git push -u origin main
 2. If the workflow shows as disabled, click **Enable workflow**
 3. Click **Run workflow** to trigger the first run manually
 
-ARM and Micro have separate workflows and can run simultaneously.
+ARM and Micro have separate workflows. Running only one at a time is recommended (see the note under How It Works).
 
 ---
 
 ## After Success
 
-Once an instance is claimed, the workflow **auto-disables** — no manual action needed.
+Once an instance is claimed, the workflow **auto-disables**. If the run shows an **Auto-disable failed** error instead, disable it manually: Actions tab → the workflow → **...** → **Disable workflow**.
 
 Go to Oracle Cloud Console → **Compute** → **Instances** → find your instance's public IP, then SSH in:
 
@@ -256,11 +267,15 @@ ssh -i private-key.pem ubuntu@your-public-ip
 | 腳本 | 目標機型 | 規格 | 架構 |
 |------|---------|------|------|
 | `oci_retry.py` | VM.Standard.A1.Flex | 2 OCPU / 12 GB RAM / 100 GB 磁碟 | ARM (Ampere) |
-| `oci_retry_micro.py` | VM.Standard.E2.1.Micro | 1 OCPU / 1 GB RAM / 50 GB 磁碟 | x86 |
+| `oci_retry_micro.py` | VM.Standard.E2.1.Micro | 1/8 OCPU / 1 GB RAM / 50 GB 磁碟 | x86 |
 
-兩種都是 Oracle Always Free 永久免費方案。從 `2026-06-15` 起，Oracle 官方文件已將 Always Free Ampere A1 配額更新為每個 tenancy 總共 `2 OCPU + 12 GB RAM`，Micro 則仍可最多建立 2 台。
+兩種機型都屬於 Oracle Always Free 永久免費方案。Always Free 的機器和磁碟都必須建立在帳號的**主區域（home region）**。免費額度如下：
 
-> 📌 **官方更新（2026-06-15 起）：** Oracle 官方 Always Free 頁面現在明確寫明 Ampere A1 為每個 tenancy **2 OCPU + 12 GB RAM**，而免費的 boot volume + block volume 儲存總額則是 **每個 region 共 200 GB**。  
+- **Ampere A1：** 每個 tenancy 合計 2 OCPU + 12 GB RAM
+- **Micro：** 最多 2 台（每台 1/8 OCPU，可短暫使用更多 CPU）
+- **儲存空間：** boot volume + block volume 合計 200 GB
+
+> 📌 **官方更新（2026-06-15 起）：** Oracle 官方 Always Free 頁面將 Ampere A1 額度從 4 OCPU + 24 GB RAM 調降為每個 tenancy **2 OCPU + 12 GB RAM**。  
 > 官方來源：https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
 
 ---
@@ -279,6 +294,8 @@ ssh -i private-key.pem ubuntu@your-public-ip
 ## 腳本設定
 
 開啟腳本，修改最上方的變數：
+
+> ⚠️ **請把 `COMPARTMENT_ID` 和 `SSH_PUBLIC_KEY` 換成你自己的值。**
 
 ### ARM 腳本：`oci_retry.py`
 
@@ -326,7 +343,7 @@ RETRY_INTERVAL = 90  # 重試間隔（秒）
 
 **用途**：告訴 Oracle 要在哪個帳號下建立資源
 
-1. Oracle Cloud 主控台 → 右上角頭像 → **租用戶: XXX**
+1. Oracle Cloud 主控台 → 右上角 **Profile** 選單 → **租用戶: XXX**
 2. 或：左上角選單 → **識別與安全** → **身份識別** → **區間** → 點（根）root
 3. 複製 OCID（格式：`ocid1.tenancy.oc1..xxxxxx`）
 
@@ -359,7 +376,7 @@ python oci_retry_micro.py
 
 ### 本機執行需要 OCI 設定檔
 
-**儲存位置**：`C:\Users\你的帳號\.oci\config`（建立資料夾和檔案，檔案無副檔名）
+**儲存位置**：`~/.oci/config`（Windows 為 `C:\Users\你的帳號\.oci\config`；建立資料夾和檔案，檔案無副檔名）
 
 ```
 [DEFAULT]
@@ -371,11 +388,12 @@ key_file=C:\Users\你的帳號\Desktop\私密金鑰.pem
 ```
 
 **取得設定檔內容**：
-1. Oracle Cloud 主控台 → 右上角頭像 → **使用者設定值**（User settings）
+1. Oracle Cloud 主控台 → 右上角 **Profile** 選單 → **使用者設定值**（User settings）
 2. 左側選單 → **我的設定檔**（My profile）→ 上方選單 → **權杖和金鑰**（Tokens and keys）→ **新增 API 金鑰**（Add API key）
 3. 選「**產生 API 金鑰組**」（Generate API key pair）→ 下載私密金鑰（`.pem` 檔）
 4. 按「新增」→ 複製出現的設定文字，貼入 `config` 檔
 5. 把 `key_file` 的路徑改成 `.pem` 檔的實際存放位置
+6. 確認 `region` 是你帳號的**主區域**，因為 Always Free 資源只能建立在主區域。查詢方式：點主控台右上角的區域名稱，選單會標出 **Home region**（例如 `Singapore (Singapore)`），再到 Oracle 的[區域列表](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)查出它的區域識別碼（Region Identifier，例如 `ap-singapore-1`）
 
 ### 腳本執行行為
 
@@ -385,6 +403,8 @@ key_file=C:\Users\你的帳號\Desktop\私密金鑰.pem
 | 搶機循環 | 每隔 `RETRY_INTERVAL` 秒嘗試一次 |
 | 容量不足 | 印出 ❌ 並繼續重試 |
 | 網路逾時 | 印出 ⚠️ 並繼續重試（不會當掉）|
+| 建立機器時的其他錯誤（例如額度已滿）| 印出 ❌ 和錯誤訊息並繼續重試；如果一直不成功，請查看 log |
+| 初始化錯誤（例如 OCID 或 API 金鑰填錯）| 在進入搶機循環前就出錯停止 |
 | 成功 | 印出 ✅ instance ID 並自動停止 |
 
 > **開放的 port：** 腳本建立新的 VCN 時，會對所有來源（`0.0.0.0/0`）開放 TCP **22（SSH）、80（HTTP）、443（HTTPS）**；如果 VCN 已經存在，則沿用原本的設定不做修改。需要其他 port 的話，可以在第一次執行前加進 `create_vcn_and_subnet()` 裡的 port 清單，或之後到 OCI 主控台，在 VCN 的安全清單（Security List）新增規則。另外，OCI 的 Ubuntu 映像檔還需要在機器的 `iptables` 放行該 port，做法請見 Oracle 官方 [Apache on Ubuntu 教學](https://docs.oracle.com/en-us/iaas/developer-tutorials/tutorials/apache-on-ubuntu/01oci-ubuntu-apache-summary.htm)的「Update firewall settings」步驟。
@@ -415,8 +435,10 @@ Job 開始
 | 同時執行上限 | 最多 1 個跑 + 1 個排隊（不會累積）|
 | 腳本出錯時 | 鏈條停止並顯示錯誤訊息；修正問題後再按一次 Run workflow |
 | 鏈條中斷時 | 手動到 Actions 頁籤再按一次 Run workflow |
-| 搶到後 | workflow 自動停用，完全不需要手動操作 |
-| ARM 與 Micro | 各自獨立 workflow，可同時執行互不干擾 |
+| 搶到後 | workflow 自動停用；如果停用失敗，執行結果會顯示「Auto-disable failed」錯誤，請手動停用 |
+| ARM 與 Micro | 各自獨立的 workflow，**建議一次只跑一個** |
+
+> ⚠️ 兩個 workflow 使用同一個 OCI 帳號。用預設的 `RETRY_INTERVAL`（90 秒）同時執行 ARM 和 Micro，OCI 會回傳 `TooManyRequests` 錯誤。建議不要同時啟動兩個 workflow。
 
 ---
 
@@ -428,7 +450,7 @@ Job 開始
 
 ### Step 2：產生 OCI API 金鑰
 
-1. Oracle Cloud 主控台 → 右上角頭像 → **使用者設定值**（User settings）
+1. Oracle Cloud 主控台 → 右上角 **Profile** 選單 → **使用者設定值**（User settings）
 2. 左側選單 → **我的設定檔**（My profile）→ 上方選單 → **權杖和金鑰**（Tokens and keys）→ **新增 API 金鑰**（Add API key）
 3. 選「**產生 API 金鑰組**」（Generate API key pair）→ 下載私密金鑰（`.pem` 檔）
 4. 按「新增」後複製出現的設定文字，從中取得以下值：
@@ -444,8 +466,8 @@ Job 開始
 |------------|---------|----------|
 | `OCI_USER` | `ocid1.user.oc1..xxxxxx` | OCI 主控台 → 我的設定檔 → OCID |
 | `OCI_FINGERPRINT` | `xx:xx:xx:xx:xx` | OCI 主控台 → 我的設定檔 → API 金鑰 → 指紋 |
-| `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | OCI 主控台 → 右上角頭像 → 租用戶: XXX → 租用戶 OCID |
-| `OCI_REGION` | 例如 `ap-singapore-1` | OCI 主控台右上角區域名稱 |
+| `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | OCI 主控台 → 右上角 **Profile** 選單 → **租用戶: &lt;名稱&gt;** → OCID |
+| `OCI_REGION` | 例如 `ap-singapore-1` | 你的**主區域**：點 OCI 主控台右上角的區域名稱，選單會標出 **Home region**（例如 `Singapore (Singapore)`），填入它的區域識別碼（例如 `ap-singapore-1`，見[區域列表](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)）。Always Free 資源只能建立在主區域 |
 | `OCI_PRIVATE_KEY` | `.pem` 檔案完整內容 | 開啟 Step 2 下載的 `.pem` 檔，複製全部文字（含頭尾 `-----BEGIN/END PRIVATE KEY-----`）|
 
 > 不需要另外建立 GitHub token：接力觸發下一個 Job 和自動停用，都是用 GitHub 每個 Job 自動產生的內建 `GITHUB_TOKEN`。
@@ -464,13 +486,13 @@ git push -u origin main
 2. 若 workflow 顯示停用，點 **Enable workflow**
 3. 點 **Run workflow** 手動立刻觸發第一次
 
-ARM 和 Micro 各自有獨立的 workflow，可以同時啟動。
+ARM 和 Micro 各自有獨立的 workflow，建議一次只啟動一個（原因見「運作方式」下方的說明）。
 
 ---
 
 ## 成功後
 
-搶到 instance 後，workflow 會**自動停用**，不需要任何手動操作。
+搶到 instance 後，workflow 會**自動停用**。如果執行結果顯示 **Auto-disable failed** 錯誤，請手動停用：Actions 頁籤 → 該 workflow → **...** → **Disable workflow**。
 
 到 Oracle Cloud 主控台 → **Compute** → **執行處理** → 查看公用 IP，即可 SSH 連線：
 

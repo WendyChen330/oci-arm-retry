@@ -4,7 +4,7 @@ import datetime
 
 # ╔══════════════════════════════════════════════════════╗
 # ║  Target : VM.Standard.E2.1.Micro (x86)               ║
-# ║  Spec   : 1 OCPU / 1 GB RAM / 50 GB disk (default)   ║
+# ║  Spec   : 1/8 OCPU / 1 GB RAM / 50 GB disk (default) ║
 # ║  Arch   : x86 (easier to claim than ARM)             ║
 # ║  Tier   : Oracle Always Free (max 2 per account)     ║
 # ║  OS     : Canonical Ubuntu 24.04 (UBUNTU_VERSION)    ║
