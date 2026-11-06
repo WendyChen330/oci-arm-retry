@@ -172,25 +172,11 @@ Create a **public** repository (public repos get unlimited Actions minutes).
 4. Click **Add** → from the configuration snippet, note these values:
    - `user`, `fingerprint`, `tenancy`, `region`
 
-### Step 3: Create a GitHub Personal Access Token (PAT)
-
-The PAT allows the workflow to auto-disable itself after success, or trigger the next Job.
-
-1. GitHub → top-right avatar → **Settings**
-2. Bottom of left sidebar → **Developer settings**
-3. **Personal access tokens** → **Tokens (classic)**
-4. **Generate new token (classic)**
-5. Fill in:
-   - **Note**: any name, e.g. `oci-retry`
-   - **Expiration**: as needed (recommend 90 days or No expiration)
-   - **Scopes**: check **`workflow`** (required to manage workflows)
-6. Click **Generate token** → **copy immediately** (shown only once)
-
-### Step 4: Set GitHub Secrets
+### Step 3: Set GitHub Secrets
 
 Go to your repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-You need **6 secrets** in total:
+You need **5 secrets** in total:
 
 | Secret Name | Value | Where to Get It |
 |-------------|-------|----------------|
@@ -199,9 +185,10 @@ You need **6 secrets** in total:
 | `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | Oracle Console → My profile → Tenancy OCID |
 | `OCI_REGION` | e.g. `ap-singapore-1` | Oracle Console top-right region name |
 | `OCI_PRIVATE_KEY` | Full contents of `.pem` file | Open the `.pem` from Step 2, copy everything (including `-----BEGIN/END PRIVATE KEY-----`) |
-| `GH_PAT` | GitHub Personal Access Token | Token generated in Step 3 |
 
-### Step 5: Push Code to GitHub
+> No GitHub token is needed: relaying to the next Job and auto-disabling use the workflow's built-in `GITHUB_TOKEN`, which GitHub creates for each Job automatically.
+
+### Step 4: Push Code to GitHub
 
 ```bash
 git remote add origin https://github.com/your-username/your-repo.git
@@ -209,7 +196,7 @@ git branch -M main
 git push -u origin main
 ```
 
-### Step 6: Start the Workflow
+### Step 5: Start the Workflow
 
 1. Go to your repository → **Actions** tab
 2. If the workflow shows as disabled, click **Enable workflow**
@@ -234,7 +221,8 @@ ssh -i private-key.pem ubuntu@your-public-ip
 ## Notes
 
 - `COMPARTMENT_ID` and `SSH_PUBLIC_KEY` in the script are safe to commit (non-sensitive)
-- Sensitive values (OCI API private key, PAT) are stored in GitHub Secrets and never committed
+- Sensitive values (OCI API private key) are stored in GitHub Secrets and never committed
+- **Change on November 7, 2026:** the workflows no longer use a `GH_PAT` secret. If you forked or copied this repo before that date, replace your `.github/workflows/oci_retry.yml` and `.github/workflows/oci_retry_micro.yml` with the current versions from this repo (the scripts don't need to change). After that, you can delete the `GH_PAT` secret and revoke the token in GitHub → Settings → Developer settings
 - `.pem` / `.key` / `.pub` files are in `.gitignore` and won't be tracked
 
 ---
@@ -406,25 +394,11 @@ Job 開始
 4. 按「新增」後複製出現的設定文字，從中取得以下值：
    - `user`、`fingerprint`、`tenancy`、`region`
 
-### Step 3：建立 GitHub Personal Access Token（PAT）
-
-PAT 讓 workflow 搶到機器後能自動停用自己、或接力觸發下一個 Job。
-
-1. GitHub → 右上角頭像 → **Settings**
-2. 左側最下方 → **Developer settings**
-3. **Personal access tokens** → **Tokens (classic)**
-4. **Generate new token (classic)**
-5. 填寫：
-   - **Note**：隨意命名，例如 `oci-retry`
-   - **Expiration**：依需求設定（建議 90 天或 No expiration）
-   - **Scopes**：勾選 **`workflow`**（必須勾，才能操作 workflow）
-6. 點 **Generate token** → **立刻複製**產生的 token（只顯示一次）
-
-### Step 4：設定 GitHub Secrets
+### Step 3：設定 GitHub Secrets
 
 到倉庫 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-共需設定 **6 個** secret：
+共需設定 **5 個** secret：
 
 | Secret 名稱 | 填入的值 | 取得位置 |
 |------------|---------|----------|
@@ -433,9 +407,10 @@ PAT 讓 workflow 搶到機器後能自動停用自己、或接力觸發下一個
 | `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | OCI 主控台 → 右上角頭像 → 租用戶: XXX → 租用戶 OCID |
 | `OCI_REGION` | 例如 `ap-singapore-1` | OCI 主控台右上角區域名稱 |
 | `OCI_PRIVATE_KEY` | `.pem` 檔案完整內容 | 開啟 Step 2 下載的 `.pem` 檔，複製全部文字（含頭尾 `-----BEGIN/END PRIVATE KEY-----`）|
-| `GH_PAT` | GitHub Personal Access Token | Step 3 產生的 token |
 
-### Step 5：推送程式碼到 GitHub
+> 不需要另外建立 GitHub token：接力觸發下一個 Job 和自動停用，都是用 GitHub 每個 Job 自動產生的內建 `GITHUB_TOKEN`。
+
+### Step 4：推送程式碼到 GitHub
 
 ```bash
 git remote add origin https://github.com/你的帳號/你的倉庫名稱.git
@@ -443,7 +418,7 @@ git branch -M main
 git push -u origin main
 ```
 
-### Step 6：啟動 workflow
+### Step 5：啟動 workflow
 
 1. 到倉庫 → **Actions** 頁籤
 2. 若 workflow 顯示停用，點 **Enable workflow**
@@ -468,5 +443,6 @@ ssh -i 私密金鑰.pem ubuntu@公用IP
 ## 注意事項
 
 - `COMPARTMENT_ID` 和 `SSH_PUBLIC_KEY` 寫在腳本裡是安全的（非機密資訊）
-- OCI API 私密金鑰、PAT 等敏感資訊全部放在 GitHub Secrets，不進版本控制
+- OCI API 私密金鑰等敏感資訊全部放在 GitHub Secrets，不進版本控制
+- **2026-11-07 更新：** workflow 不再使用 `GH_PAT` secret。如果你在這個日期之前 fork 或複製了這個 repo，請用這個 repo 目前的版本取代你的 `.github/workflows/oci_retry.yml` 和 `.github/workflows/oci_retry_micro.yml`（腳本不需要更新），之後就可以刪掉 `GH_PAT` secret，並到 GitHub → Settings → Developer settings 撤銷（revoke）那組 token
 - `.pem` / `.key` / `.pub` 已加入 `.gitignore`，不會被 commit
