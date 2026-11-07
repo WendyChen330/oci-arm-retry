@@ -4,7 +4,7 @@ on:
   workflow_dispatch:  # Manual trigger only
 
 concurrency:
-  group: oci-retry-micro      # Separate from ARM workflow, no interference
+  group: oci-retry-micro      # Separate queue from the ARM workflow (both share one OCI account)
   cancel-in-progress: false   # Do not cancel running jobs; new ones queue (max 1 running + 1 waiting)
 
 jobs:
@@ -103,14 +103,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}   # Relay on the same branch this run started from
         run: |
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/$REPO/actions/workflows/oci_retry_micro.yml/dispatches" \
-            -d '{"ref":"main"}' || {
-            echo "::error title=Relay failed::Could not trigger the next Job, so the retry chain has stopped. Restart it manually: Actions tab > OCI Micro Retry > Run workflow."
-            exit 1
-          }
-          echo "Next Job triggered"
+          # Retry up to 3 times so a brief GitHub API error doesn't end the chain
+          for attempt in 1 2 3; do
+            if curl -fsS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$REPO/actions/workflows/oci_retry_micro.yml/dispatches" \
+              -d "{\"ref\":\"$REF\"}"; then
+              echo "Next Job triggered on $REF"
+              exit 0
+            fi
+            echo "Dispatch attempt $attempt failed" >&2
+            if [ "$attempt" -lt 3 ]; then sleep 15; fi
+          done
+          echo "::error title=Relay failed::Could not trigger the next Job after 3 attempts, so the retry chain has stopped. Restart it manually: Actions tab > OCI Micro Retry > Run workflow."
+          exit 1
