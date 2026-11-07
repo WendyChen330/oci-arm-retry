@@ -38,6 +38,7 @@ jobs:
           OCI_TENANCY:     ${{ secrets.OCI_TENANCY }}
           OCI_REGION:      ${{ secrets.OCI_REGION }}
           OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
         run: |
           mkdir -p ~/.oci
 
@@ -45,7 +46,10 @@ jobs:
           printf '%s' "$OCI_PRIVATE_KEY" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
 
-          # Write config (key_file uses absolute path)
+          # Write SSH public key (installed on the new instance)
+          printf '%s\n' "$OCI_SSH_PUBLIC_KEY" > ~/.oci/ssh_public_key.pub
+
+          # Write config (file paths are absolute)
           cat > ~/.oci/config << EOF
           [DEFAULT]
           user=$OCI_USER
@@ -53,6 +57,7 @@ jobs:
           tenancy=$OCI_TENANCY
           region=$OCI_REGION
           key_file=/home/runner/.oci/oci_api_key.pem
+          ssh_public_key_file=/home/runner/.oci/ssh_public_key.pub
           EOF
 
       - name: Run OCI retry script

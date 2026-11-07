@@ -1,4 +1,5 @@
 import oci
+import os
 import time
 import datetime
 
@@ -11,10 +12,6 @@ import datetime
 # ╚══════════════════════════════════════════════════════╝
 
 # ─── Configuration ───────────────────────────────────────
-COMPARTMENT_ID = (
-    "ocid1.tenancy.oc1..aaaaaaaaaqij5zlnm3v5qprvdll3j7nc6o3dk4ykzerugzxe37ckajkpjxpa"  # Replace with your tenancy OCID
-)
-SSH_PUBLIC_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCxPqVeut2vbwt8VVAvHDnEN+q61jrIAGD9cQgW6kTeLCjjzm9UHt2Flf1KoohSu+0YFvSn8+t67r9T9wfdP14WBfZAg531CCyUNTbF5KmkaHgmxftWu3FgY00BTnGa4YEEXdAGn3X953HzFKJDpJVJyWFfWXJUOWdfivTKlO+62SBnlIdcanckwA6rzr9dXNSYlasoVnuk+ujANjhnxf4TpKcI4AQrAmRJQ83lXfI2yExBMX+Qx/JNSA2/2XFRfT7OMgddExibCRpSyammfatNLUIM5s+ab6aeO3aNvVWGok6/dpYaBPbvndERQs6p9FQr88C/VFeEwHCtvMT8c2WB ssh-key-2026-03-07"  # Replace with your SSH public key (.pub file content)
 INSTANCE_NAME = "micro-server"  # Change for each new instance (e.g. "micro-server-2" for a second one)
 UBUNTU_VERSION = "24.04"  # OS for the new instance: "24.04" (default), "26.04" or "22.04"
 BOOT_VOLUME_SIZE_IN_GBS = 50
@@ -22,13 +19,47 @@ RETRY_INTERVAL = 90  # seconds
 # ────────────────────────────────────────────────────────
 
 # ─── OCI Authentication ──────────────────────────────────
-# [Local] Create a config file at ~/.oci/config
-#   See README.md for format; key_file should point to your API private key .pem
+# [Local] Create a config file at ~/.oci/config (format: see README.md)
+#   key_file            -> your OCI API private key (.pem)
+#   ssh_public_key_file -> your SSH public key (.pub), installed on the new instance
 #
 # [GitHub Actions] No config file needed
 #   The workflow auto-creates it from GitHub Secrets — see README.md
 # ────────────────────────────────────────────────────────
 config = oci.config.from_file()
+
+# Resources are created in the tenancy (root compartment) from the OCI config
+COMPARTMENT_ID = config["tenancy"]
+
+
+def load_ssh_public_key():
+    """Read the SSH public key from the file set by ssh_public_key_file in the OCI config."""
+    path = config.get("ssh_public_key_file")
+    if not path:
+        raise SystemExit(
+            "No SSH public key: add ssh_public_key_file=<path to your .pub file> to your OCI config "
+            "(GitHub Actions: add the OCI_SSH_PUBLIC_KEY GitHub Secret)."
+        )
+    path = os.path.expanduser(path)
+    try:
+        with open(path, encoding="utf-8-sig") as f:  # utf-8-sig also strips a BOM added by Notepad
+            key = f.read().strip()
+    except OSError as e:
+        raise SystemExit(f"Cannot read SSH public key file {path}: {e}")
+    if not key:
+        raise SystemExit(
+            f"SSH public key file is empty: {path} "
+            "(GitHub Actions: check the OCI_SSH_PUBLIC_KEY GitHub Secret)."
+        )
+    if "PRIVATE KEY" in key:
+        raise SystemExit(
+            f"{path} is a private key. Point ssh_public_key_file to your .pub file "
+            "(GitHub Actions: put the .pub contents in the OCI_SSH_PUBLIC_KEY GitHub Secret)."
+        )
+    return key
+
+
+SSH_PUBLIC_KEY = load_ssh_public_key()
 
 
 def get_availability_domain():

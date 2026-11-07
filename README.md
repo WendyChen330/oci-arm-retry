@@ -42,13 +42,14 @@ Both shapes are part of the Oracle Always Free tier. Always Free instances and v
 
 Open the script and edit the variables at the top:
 
-> ⚠️ **Replace `COMPARTMENT_ID` and `SSH_PUBLIC_KEY` with your own values.**
+> 💡 `COMPARTMENT_ID` can be left empty: the script then uses the `tenancy` value (your tenancy OCID) from the OCI config file. In GitHub Actions, that file is created from the `OCI_TENANCY` GitHub Secret; when running locally, it is your `~/.oci/config`. Fill it in only if you want to create the instance in a compartment other than your tenancy.
+>
+> The SSH public key is not set in the script: GitHub Actions reads the `OCI_SSH_PUBLIC_KEY` GitHub Secret (see Step 3 under Setup Steps), and local runs read the file set by `ssh_public_key_file` in your OCI config.
 
 ### ARM script: `oci_retry.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..your-ocid"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...your-public-key"
+COMPARTMENT_ID = ""  # Leave empty to use your tenancy (root compartment) from the OCI config
 INSTANCE_NAME = "arm-server"
 UBUNTU_VERSION = "24.04"  # OS for the new instance: "24.04" (default), "26.04" or "22.04"
 ARM_OCPUS = 2
@@ -62,8 +63,7 @@ RETRY_INTERVAL = 90  # Retry interval in seconds
 ### Micro script: `oci_retry_micro.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..your-ocid"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...your-public-key"
+COMPARTMENT_ID = ""  # Leave empty to use your tenancy (root compartment) from the OCI config
 INSTANCE_NAME  = "micro-server"   # Change to "micro-server-2" when claiming your second Micro instance
 UBUNTU_VERSION = "24.04"  # OS for the new instance: "24.04" (default), "26.04" or "22.04"
 BOOT_VOLUME_SIZE_IN_GBS = 50
@@ -88,7 +88,7 @@ Sources: [Ubuntu release cycle](https://ubuntu.com/about/release-cycle), [python
 
 ### Get Compartment ID (Tenancy OCID)
 
-**Purpose**: Tells Oracle which account to create resources under.
+**Purpose**: Tells Oracle which account to create resources under. Only needed if you want a compartment other than your tenancy (root compartment); otherwise leave `COMPARTMENT_ID` empty.
 
 1. Oracle Cloud Console → top-right **Profile** menu → **Tenancy: XXX**
 2. Or: top-left menu → **Identity & Security** → **Identity** → **Compartments** → click root
@@ -101,7 +101,7 @@ Sources: [Ubuntu release cycle](https://ubuntu.com/about/release-cycle), [python
 1. When creating an instance in Oracle Cloud, choose **Generate key pair** (Generate SSH key pair)
 2. Download two files:
    - `*.key` or `*.pem` (private key — keep this safe, used for SSH login)
-   - `*.pub` (public key — paste into the script)
+   - `*.pub` (public key — GitHub Actions: add its contents as the `OCI_SSH_PUBLIC_KEY` GitHub Secret, see Step 3 under Setup Steps; local runs: set `ssh_public_key_file` in your OCI config to this file)
 3. Open the `.pub` file in a text editor, copy all content (starts with `ssh-rsa AAAA...`)
 
 Or generate your own key locally with `ssh-keygen`.
@@ -109,6 +109,35 @@ Or generate your own key locally with `ssh-keygen`.
 ---
 
 ## Run Locally
+
+### 1. Create the OCI Config File
+
+**Location**: `~/.oci/config` (on Windows: `C:\Users\YourName\.oci\config`, no file extension)
+
+```
+[DEFAULT]
+user=ocid1.user.oc1..xxxxxx
+fingerprint=xx:xx:xx:xx:xx
+tenancy=ocid1.tenancy.oc1..xxxxxx
+region=ap-singapore-1
+key_file=C:\Users\YourName\Desktop\private-key.pem
+ssh_public_key_file=C:\Users\YourName\Desktop\ssh-key.pub
+```
+
+**How to get config values**:
+1. Oracle Cloud Console → top-right **Profile** menu → **User settings**
+2. Left menu → **My profile** → top menu → **Tokens and keys** → **Add API key**
+3. Choose **Generate API key pair** → download the private key (`.pem` file)
+4. Click **Add** → copy the configuration snippet that appears, paste it into your `config` file
+5. Update `key_file` to the actual path of your `.pem` file
+6. Make sure `region` is your tenancy's **home region**, because Always Free resources can only be created there. To find it, click the region name at the top right of the Console; the menu shows your **Home region** (e.g. `Singapore (Singapore)`). Use its Region Identifier (e.g. `ap-singapore-1`) from Oracle's [region list](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)
+7. Add `ssh_public_key_file` with the path to your SSH public key (`.pub`, see **Get SSH Public Key** above). The script installs this key on the new instance
+
+### 2. Adjust Script Settings (Optional)
+
+Instance name, Ubuntu version and the other settings are at the top of each script. See **Script Configuration** above.
+
+### 3. Install and Run
 
 ```bash
 # Install dependencies (once only)
@@ -120,27 +149,6 @@ python oci_retry.py
 # Run Micro version
 python oci_retry_micro.py
 ```
-
-### Local OCI Config File Required
-
-**Location**: `~/.oci/config` (on Windows: `C:\Users\YourName\.oci\config`, no file extension)
-
-```
-[DEFAULT]
-user=ocid1.user.oc1..xxxxxx
-fingerprint=xx:xx:xx:xx:xx
-tenancy=ocid1.tenancy.oc1..xxxxxx
-region=ap-singapore-1
-key_file=C:\Users\YourName\Desktop\private-key.pem
-```
-
-**How to get config values**:
-1. Oracle Cloud Console → top-right **Profile** menu → **User settings**
-2. Left menu → **My profile** → top menu → **Tokens and keys** → **Add API key**
-3. Choose **Generate API key pair** → download the private key (`.pem` file)
-4. Click **Add** → copy the configuration snippet that appears, paste it into your `config` file
-5. Update `key_file` to the actual path of your `.pem` file
-6. Make sure `region` is your tenancy's **home region**, because Always Free resources can only be created there. To find it, click the region name at the top right of the Console; the menu shows your **Home region** (e.g. `Singapore (Singapore)`). Use its Region Identifier (e.g. `ap-singapore-1`) from Oracle's [region list](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)
 
 ### Script Behavior
 
@@ -207,7 +215,7 @@ Create a **public** repository (public repos get unlimited Actions minutes).
 
 Go to your repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-You need **5 secrets** in total:
+You need **6 secrets** in total:
 
 | Secret Name | Value | Where to Get It |
 |-------------|-------|----------------|
@@ -216,6 +224,7 @@ You need **5 secrets** in total:
 | `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | Oracle Console → top-right **Profile** menu → **Tenancy: &lt;name&gt;** → OCID |
 | `OCI_REGION` | e.g. `ap-singapore-1` | Your **home region**: click the region name at the top right of the Oracle Console; the menu shows **Home region** (e.g. `Singapore (Singapore)`). Enter its Region Identifier (e.g. `ap-singapore-1`, see the [region list](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)). Always Free resources can only be created there |
 | `OCI_PRIVATE_KEY` | Full contents of `.pem` file | Open the `.pem` from Step 2, copy everything (including `-----BEGIN/END PRIVATE KEY-----`) |
+| `OCI_SSH_PUBLIC_KEY` | Full contents of your `.pub` file | See **Get SSH Public Key** above (starts with `ssh-`) |
 
 > No GitHub token is needed: relaying to the next Job and auto-disabling use the workflow's built-in `GITHUB_TOKEN`, which GitHub creates for each Job automatically.
 
@@ -251,9 +260,9 @@ ssh -i private-key.pem ubuntu@your-public-ip
 
 ## Notes
 
-- `COMPARTMENT_ID` and `SSH_PUBLIC_KEY` in the script are safe to commit (non-sensitive)
+- `COMPARTMENT_ID` in the script is safe to commit (non-sensitive)
 - Sensitive values (OCI API private key) are stored in GitHub Secrets and never committed
-- **Change on November 7, 2026:** the workflows no longer use a `GH_PAT` secret. If you forked or copied this repo before that date, replace your `.github/workflows/oci_retry.yml` and `.github/workflows/oci_retry_micro.yml` with the current versions from this repo (the scripts don't need to change). After that, you can delete the `GH_PAT` secret and revoke the token in GitHub → Settings → Developer settings
+- **Change on November 7, 2026:** the workflows no longer use a `GH_PAT` secret. If you forked or copied this repo before that date, replace your `.github/workflows/oci_retry.yml` and `.github/workflows/oci_retry_micro.yml` with the current versions from this repo (the scripts don't need to change; if you update the scripts as well, also add the `OCI_SSH_PUBLIC_KEY` GitHub Secret). After that, you can delete the `GH_PAT` secret and revoke the token in GitHub → Settings → Developer settings
 - `.pem` / `.key` / `.pub` files are in `.gitignore` and won't be tracked
 
 ---
@@ -295,13 +304,14 @@ ssh -i private-key.pem ubuntu@your-public-ip
 
 開啟腳本，修改最上方的變數：
 
-> ⚠️ **請把 `COMPARTMENT_ID` 和 `SSH_PUBLIC_KEY` 換成你自己的值。**
+> 💡 `COMPARTMENT_ID` 可以留空：腳本會自動使用 OCI 設定檔裡的 `tenancy`（你的租用戶 OCID）。在 GitHub Actions 上，這個設定檔是由 GitHub Secrets 的 `OCI_TENANCY` 產生；在本機執行時，就是你的 `~/.oci/config`。只有想把機器建在租用戶以外的區間（compartment）時才需要填。
+>
+> SSH 公開金鑰不在腳本裡設定：GitHub Actions 讀取 GitHub Secrets 的 `OCI_SSH_PUBLIC_KEY`（設定方式見「設定步驟」Step 3），本機執行則讀取 OCI 設定檔裡 `ssh_public_key_file` 指定的檔案。
 
 ### ARM 腳本：`oci_retry.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..你的OCID"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...你的公開金鑰內容"
+COMPARTMENT_ID = ""  # 留空則使用 OCI 設定檔中的租用戶（根區間）
 INSTANCE_NAME = "arm-server"
 UBUNTU_VERSION = "24.04"  # 新機器安裝的作業系統："24.04"（預設）、"26.04" 或 "22.04"
 ARM_OCPUS = 2
@@ -315,8 +325,7 @@ RETRY_INTERVAL = 90  # 重試間隔（秒）
 ### Micro 腳本：`oci_retry_micro.py`
 
 ```python
-COMPARTMENT_ID = "ocid1.tenancy.oc1..你的OCID"
-SSH_PUBLIC_KEY = "ssh-rsa AAAA...你的公開金鑰內容"
+COMPARTMENT_ID = ""  # 留空則使用 OCI 設定檔中的租用戶（根區間）
 INSTANCE_NAME  = "micro-server"   # 搶第二台時改成 "micro-server-2"，方便在 OCI Console 區分
 UBUNTU_VERSION = "24.04"  # 新機器安裝的作業系統："24.04"（預設）、"26.04" 或 "22.04"
 BOOT_VOLUME_SIZE_IN_GBS = 50
@@ -341,7 +350,7 @@ RETRY_INTERVAL = 90  # 重試間隔（秒）
 
 ### 取得 Compartment ID（租用戶 OCID）
 
-**用途**：告訴 Oracle 要在哪個帳號下建立資源
+**用途**：告訴 Oracle 要在哪個帳號下建立資源。只有想使用租用戶（根區間）以外的區間時才需要填，否則 `COMPARTMENT_ID` 留空即可
 
 1. Oracle Cloud 主控台 → 右上角 **Profile** 選單 → **租用戶: XXX**
 2. 或：左上角選單 → **識別與安全** → **身份識別** → **區間** → 點（根）root
@@ -354,7 +363,7 @@ RETRY_INTERVAL = 90  # 重試間隔（秒）
 1. 在 Oracle Cloud 建立 instance 時，選「**產生金鑰組**」（Generate key pair）
 2. 下載兩個檔案：
    - `*.key` 或 `*.pem`（私密金鑰，自己保管，連線時用）
-   - `*.pub`（公開金鑰，填入腳本）
+   - `*.pub`（公開金鑰。GitHub Actions：內容要設定到 GitHub Secrets 的 `OCI_SSH_PUBLIC_KEY`，設定方式見「設定步驟」的 Step 3；本機執行：在 OCI 設定檔的 `ssh_public_key_file` 填入這個檔案的路徑）
 3. 用記事本開啟 `.pub` 檔，複製全部內容（格式：`ssh-rsa AAAA...` 開頭）
 
 或在本機執行 `ssh-keygen` 自己產生。
@@ -362,6 +371,35 @@ RETRY_INTERVAL = 90  # 重試間隔（秒）
 ---
 
 ## 本機執行
+
+### 1. 建立 OCI 設定檔
+
+**儲存位置**：`~/.oci/config`（Windows 為 `C:\Users\你的帳號\.oci\config`；建立資料夾和檔案，檔案無副檔名）
+
+```
+[DEFAULT]
+user=ocid1.user.oc1..xxxxxx
+fingerprint=xx:xx:xx:xx:xx
+tenancy=ocid1.tenancy.oc1..xxxxxx
+region=ap-singapore-1
+key_file=C:\Users\你的帳號\Desktop\私密金鑰.pem
+ssh_public_key_file=C:\Users\你的帳號\Desktop\ssh-key.pub
+```
+
+**取得設定檔內容**：
+1. Oracle Cloud 主控台 → 右上角 **Profile** 選單 → **使用者設定值**（User settings）
+2. 左側選單 → **我的設定檔**（My profile）→ 上方選單 → **權杖和金鑰**（Tokens and keys）→ **新增 API 金鑰**（Add API key）
+3. 選「**產生 API 金鑰組**」（Generate API key pair）→ 下載私密金鑰（`.pem` 檔）
+4. 按「新增」→ 複製出現的設定文字，貼入 `config` 檔
+5. 把 `key_file` 的路徑改成 `.pem` 檔的實際存放位置
+6. 確認 `region` 是你帳號的**主區域**，因為 Always Free 資源只能建立在主區域。查詢方式：點主控台右上角的區域名稱，選單會標出 **Home region**（例如 `Singapore (Singapore)`），再到 Oracle 的[區域列表](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)查出它的區域識別碼（Region Identifier，例如 `ap-singapore-1`）
+7. 加上 `ssh_public_key_file`，填入你的 SSH 公開金鑰（`.pub`，見上方「取得 SSH 公開金鑰」）的路徑。腳本會把這把金鑰裝到新機器上
+
+### 2. 調整腳本設定（選擇性）
+
+機器名稱、Ubuntu 版本等設定都在腳本最上方，請見上方「腳本設定」。
+
+### 3. 安裝套件並執行
 
 ```bash
 # 安裝套件（只需一次）
@@ -373,27 +411,6 @@ python oci_retry.py
 # 執行 Micro 版
 python oci_retry_micro.py
 ```
-
-### 本機執行需要 OCI 設定檔
-
-**儲存位置**：`~/.oci/config`（Windows 為 `C:\Users\你的帳號\.oci\config`；建立資料夾和檔案，檔案無副檔名）
-
-```
-[DEFAULT]
-user=ocid1.user.oc1..xxxxxx
-fingerprint=xx:xx:xx:xx:xx
-tenancy=ocid1.tenancy.oc1..xxxxxx
-region=ap-singapore-1
-key_file=C:\Users\你的帳號\Desktop\私密金鑰.pem
-```
-
-**取得設定檔內容**：
-1. Oracle Cloud 主控台 → 右上角 **Profile** 選單 → **使用者設定值**（User settings）
-2. 左側選單 → **我的設定檔**（My profile）→ 上方選單 → **權杖和金鑰**（Tokens and keys）→ **新增 API 金鑰**（Add API key）
-3. 選「**產生 API 金鑰組**」（Generate API key pair）→ 下載私密金鑰（`.pem` 檔）
-4. 按「新增」→ 複製出現的設定文字，貼入 `config` 檔
-5. 把 `key_file` 的路徑改成 `.pem` 檔的實際存放位置
-6. 確認 `region` 是你帳號的**主區域**，因為 Always Free 資源只能建立在主區域。查詢方式：點主控台右上角的區域名稱，選單會標出 **Home region**（例如 `Singapore (Singapore)`），再到 Oracle 的[區域列表](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)查出它的區域識別碼（Region Identifier，例如 `ap-singapore-1`）
 
 ### 腳本執行行為
 
@@ -460,7 +477,7 @@ Job 開始
 
 到倉庫 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-共需設定 **5 個** secret：
+共需設定 **6 個** secret：
 
 | Secret 名稱 | 填入的值 | 取得位置 |
 |------------|---------|----------|
@@ -469,6 +486,7 @@ Job 開始
 | `OCI_TENANCY` | `ocid1.tenancy.oc1..xxxxxx` | OCI 主控台 → 右上角 **Profile** 選單 → **租用戶: &lt;名稱&gt;** → OCID |
 | `OCI_REGION` | 例如 `ap-singapore-1` | 你的**主區域**：點 OCI 主控台右上角的區域名稱，選單會標出 **Home region**（例如 `Singapore (Singapore)`），填入它的區域識別碼（例如 `ap-singapore-1`，見[區域列表](https://docs.oracle.com/en-us/iaas/Content/General/Concepts/regions.htm)）。Always Free 資源只能建立在主區域 |
 | `OCI_PRIVATE_KEY` | `.pem` 檔案完整內容 | 開啟 Step 2 下載的 `.pem` 檔，複製全部文字（含頭尾 `-----BEGIN/END PRIVATE KEY-----`）|
+| `OCI_SSH_PUBLIC_KEY` | `.pub` 檔案完整內容 | 見上方「取得 SSH 公開金鑰」（以 `ssh-` 開頭）|
 
 > 不需要另外建立 GitHub token：接力觸發下一個 Job 和自動停用，都是用 GitHub 每個 Job 自動產生的內建 `GITHUB_TOKEN`。
 
@@ -504,7 +522,7 @@ ssh -i 私密金鑰.pem ubuntu@公用IP
 
 ## 注意事項
 
-- `COMPARTMENT_ID` 和 `SSH_PUBLIC_KEY` 寫在腳本裡是安全的（非機密資訊）
+- `COMPARTMENT_ID` 寫在腳本裡是安全的（非機密資訊）
 - OCI API 私密金鑰等敏感資訊全部放在 GitHub Secrets，不進版本控制
-- **2026-11-07 更新：** workflow 不再使用 `GH_PAT` secret。如果你在這個日期之前 fork 或複製了這個 repo，請用這個 repo 目前的版本取代你的 `.github/workflows/oci_retry.yml` 和 `.github/workflows/oci_retry_micro.yml`（腳本不需要更新），之後就可以刪掉 `GH_PAT` secret，並到 GitHub → Settings → Developer settings 撤銷（revoke）那組 token
+- **2026-11-07 更新：** workflow 不再使用 `GH_PAT` secret。如果你在這個日期之前 fork 或複製了這個 repo，請用這個 repo 目前的版本取代你的 `.github/workflows/oci_retry.yml` 和 `.github/workflows/oci_retry_micro.yml`（腳本不需要更新；如果連腳本也一起更新，請另外新增 GitHub Secrets 的 `OCI_SSH_PUBLIC_KEY`），之後就可以刪掉 `GH_PAT` secret，並到 GitHub → Settings → Developer settings 撤銷（revoke）那組 token
 - `.pem` / `.key` / `.pub` 已加入 `.gitignore`，不會被 commit
