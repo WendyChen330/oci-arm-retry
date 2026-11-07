@@ -56,9 +56,15 @@ def get_ubuntu_arm_image():
 
 def create_vcn_and_subnet():
     network = oci.core.VirtualNetworkClient(config)
+    # Read-only lookups retry temporary errors (timeouts, 429, 5xx) with the SDK's
+    # default strategy, so a brief OCI hiccup at startup doesn't stop the script.
+    # Wrong OCIDs or keys (401/404) are not retried and still fail immediately.
+    retry = oci.retry.DEFAULT_RETRY_STRATEGY
 
     # Check if VCN already exists
-    vcns = network.list_vcns(COMPARTMENT_ID, display_name="retry-vcn").data
+    vcns = network.list_vcns(
+        COMPARTMENT_ID, display_name="retry-vcn", retry_strategy=retry
+    ).data
     if vcns:
         vcn = vcns[0]
         print(f"Using existing VCN: {vcn.id}")
@@ -96,7 +102,9 @@ def create_vcn_and_subnet():
         )
 
         # Open inbound ports: SSH / HTTP / HTTPS (add more ports to this list if needed)
-        security_lists = network.list_security_lists(COMPARTMENT_ID, vcn_id=vcn.id).data
+        security_lists = network.list_security_lists(
+            COMPARTMENT_ID, vcn_id=vcn.id, retry_strategy=retry
+        ).data
         if security_lists:
             existing_egress = security_lists[0].egress_security_rules
             new_ingress = []
@@ -122,7 +130,7 @@ def create_vcn_and_subnet():
 
     # Check if subnet already exists
     subnets = network.list_subnets(
-        COMPARTMENT_ID, vcn_id=vcn.id, display_name="retry-subnet"
+        COMPARTMENT_ID, vcn_id=vcn.id, display_name="retry-subnet", retry_strategy=retry
     ).data
     if subnets:
         subnet = subnets[0]
